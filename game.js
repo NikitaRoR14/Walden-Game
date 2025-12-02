@@ -340,6 +340,14 @@ let particles = [];
 let fishingLine = null;
 let bobber = null;
 
+// Thoreau clickable area
+const thoreauClickArea = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+};
+
 // Animation frame
 let lastTime = 0;
 let gameLoopRunning = false;
@@ -531,11 +539,77 @@ function init() {
     // Keyboard controls
     document.addEventListener('keydown', handleKeyPress);
     
+    // Canvas click handler for Thoreau
+    canvas.addEventListener('click', handleCanvasClick);
+    canvas.addEventListener('mousemove', handleCanvasHover);
+    canvas.style.cursor = 'default';
+    
+    // Biography popup close button
+    const closeBioBtn = document.getElementById('close-bio-btn');
+    if (closeBioBtn) {
+        closeBioBtn.addEventListener('click', closeBiography);
+    }
+    
     // Initialize particles
     createParticles();
     
     // Show main menu
     showMainMenu();
+}
+
+function handleCanvasClick(e) {
+    if (gameState.mode !== 'story' && gameState.mode !== 'freeplay') return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Scale coordinates to canvas size
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = x * scaleX;
+    const canvasY = y * scaleY;
+    
+    // Check if click is on Thoreau
+    if (canvasX >= thoreauClickArea.x && 
+        canvasX <= thoreauClickArea.x + thoreauClickArea.width &&
+        canvasY >= thoreauClickArea.y && 
+        canvasY <= thoreauClickArea.y + thoreauClickArea.height) {
+        openBiography();
+    }
+}
+
+function handleCanvasHover(e) {
+    if (gameState.mode !== 'story' && gameState.mode !== 'freeplay') return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = x * scaleX;
+    const canvasY = y * scaleY;
+    
+    // Check if hovering over Thoreau
+    if (canvasX >= thoreauClickArea.x && 
+        canvasX <= thoreauClickArea.x + thoreauClickArea.width &&
+        canvasY >= thoreauClickArea.y && 
+        canvasY <= thoreauClickArea.y + thoreauClickArea.height) {
+        canvas.style.cursor = 'pointer';
+    } else {
+        canvas.style.cursor = 'default';
+    }
+}
+
+function openBiography() {
+    soundManager.play('dialogOpen');
+    document.getElementById('biography-popup').classList.remove('hidden');
+}
+
+function closeBiography() {
+    soundManager.play('menuClose');
+    document.getElementById('biography-popup').classList.add('hidden');
 }
 
 function showMainMenu() {
@@ -1710,66 +1784,163 @@ function drawThoreau() {
     const brightness = gameState.atmosphere.brightness;
     const x = canvas.width * 0.72;
     const y = canvas.height * 0.52;
+    const time = Date.now() / 1000;
+    
+    // Update clickable area
+    thoreauClickArea.x = x - 20;
+    thoreauClickArea.y = y - 35;
+    thoreauClickArea.width = 45;
+    thoreauClickArea.height = 80;
     
     // Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 42, 12, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 43, 14, 5, 0, 0, Math.PI * 2);
     ctx.fill();
     
-    // Legs
-    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.fillRect(x - 6, y + 20, 5, 20);
-    ctx.fillRect(x + 1, y + 20, 5, 20);
+    // Subtle breathing animation
+    const breathe = Math.sin(time * 0.8) * 0.5;
     
-    // Body
+    // Legs with slight sway
+    const sway = Math.sin(time * 0.5) * 0.5;
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.fillRect(x - 6 + sway, y + 20, 5, 21);
+    ctx.fillRect(x + 1 - sway, y + 20, 5, 21);
+    
+    // Body (coat)
     ctx.fillStyle = adjustBrightness('#5C4033', brightness);
-    ctx.fillRect(x - 10, y, 20, 25);
+    ctx.fillRect(x - 11, y + breathe, 22, 26);
+    
+    // Coat buttons
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y + 5 + i * 7 + breathe, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
     
     // Arms
     ctx.fillStyle = adjustBrightness('#5C4033', brightness);
-    // Right arm (holding rod)
+    // Right arm (holding rod) with slight motion
     ctx.save();
-    ctx.translate(x + 10, y + 8);
-    ctx.rotate(Math.PI / 6);
-    ctx.fillRect(-3, 0, 6, 18);
+    ctx.translate(x + 10, y + 8 + breathe);
+    ctx.rotate(Math.PI / 6 + Math.sin(time) * 0.05);
+    ctx.fillRect(-3, 0, 6, 19);
     ctx.restore();
     
     // Left arm
-    ctx.fillRect(x - 13, y + 5, 6, 15);
+    ctx.fillRect(x - 14, y + 5 + breathe, 6, 16);
+    
+    // Neck
+    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
+    ctx.fillRect(x - 4, y - 2, 8, 4);
     
     // Head
     ctx.fillStyle = adjustBrightness('#d4a574', brightness);
     ctx.beginPath();
-    ctx.arc(x, y - 8, 11, 0, Math.PI * 2);
+    ctx.arc(x, y - 8, 12, 0, Math.PI * 2);
     ctx.fill();
     
-    // Beard
+    // Ear
+    ctx.fillStyle = adjustBrightness('#c49564', brightness);
+    ctx.beginPath();
+    ctx.arc(x - 10, y - 8, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hair
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.beginPath();
+    ctx.ellipse(x - 5, y - 15, 8, 6, -0.2, 0, Math.PI);
+    ctx.fill();
+    
+    // Beard (fuller, more detailed)
     ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
     ctx.beginPath();
-    ctx.arc(x, y - 3, 7, 0, Math.PI);
+    ctx.arc(x - 2, y - 1, 8, 0, Math.PI);
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 2, y - 1, 7, 0, Math.PI);
+    ctx.fill();
+    
+    // Mustache
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.fillRect(x - 6, y - 6, 5, 2);
+    ctx.fillRect(x + 1, y - 6, 5, 2);
+    
+    // Eyes
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.beginPath();
+    ctx.arc(x - 4, y - 10, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 4, y - 10, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Eye glint
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.beginPath();
+    ctx.arc(x - 3, y - 11, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 5, y - 11, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Nose
+    ctx.strokeStyle = adjustBrightness('#b48554', brightness);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 10);
+    ctx.lineTo(x + 2, y - 6);
+    ctx.stroke();
     
     // Hat
     ctx.fillStyle = adjustBrightness('#2C2416', brightness);
     // Hat brim
-    ctx.fillRect(x - 15, y - 20, 30, 4);
-    // Hat top
-    ctx.fillRect(x - 10, y - 30, 20, 14);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 20, 17, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Hat crown
+    ctx.fillRect(x - 11, y - 32, 22, 15);
+    // Hat band
+    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.fillRect(x - 11, y - 22, 22, 3);
     
-    // Fishing rod
+    // Fishing rod (more detailed)
+    const rodTip = Math.sin(time * 2) * 1;
     ctx.strokeStyle = adjustBrightness('#8B7355', brightness);
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(x + 8, y + 20);
-    ctx.lineTo(x + 40, y - 25);
+    ctx.lineTo(x + 40, y - 25 + rodTip);
     ctx.stroke();
+    
+    // Rod segments
+    ctx.strokeStyle = adjustBrightness('#6d5a44', brightness);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+        const segY = y + 20 - (i * 15);
+        ctx.beginPath();
+        ctx.moveTo(x + 8 + (i * 10.5), segY);
+        ctx.lineTo(x + 11 + (i * 10.5), segY);
+        ctx.stroke();
+    }
     
     // Rod tip
     ctx.fillStyle = adjustBrightness('#6d5a44', brightness);
     ctx.beginPath();
-    ctx.arc(x + 40, y - 25, 3, 0, Math.PI * 2);
+    ctx.arc(x + 40, y - 25 + rodTip, 3, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Highlight if hoverable
+    if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
+        ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.05;
+        ctx.strokeStyle = '#e8dcc4';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(thoreauClickArea.x, thoreauClickArea.y, thoreauClickArea.width, thoreauClickArea.height);
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+    }
 }
 
 function drawBird(x, y) {
