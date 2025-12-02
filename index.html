@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voices at the Pond - A Walden Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="main-menu" class="screen">
+            <div class="menu-content">
+                <h1>Voices at the Pond</h1>
+                <p class="subtitle">A game about Henry David Thoreau's experiment at Walden</p>
+                
+                <div class="menu-buttons">
+                    <button id="story-mode-btn" class="menu-button">
+                        <span class="button-title">📖 Story Mode</span>
+                        <span class="button-desc">Experience Thoreau's philosophical journey</span>
+                    </button>
+                    
+                    <button id="freeplay-mode-btn" class="menu-button">
+                        <span class="button-title">🎣 Free Play</span>
+                        <span class="button-desc">Catch all the fish from Thoreau's writings</span>
+                    </button>
+                    
+                    <button id="view-collection-btn" class="menu-button">
+                        <span class="button-title">📚 Fish Collection</span>
+                        <span class="button-desc">View your collected species</span>
+                    </button>
+                </div>
+                
+                <p class="flavor-text">"I went to the woods because I wished to live deliberately..."</p>
+            </div>
+        </div>
+
+        <div id="collection-screen" class="screen">
+            <div class="collection-content">
+                <h2>Fish Collection</h2>
+                <p id="collection-counter" class="collection-counter">0 / 8 species collected</p>
+                <div id="collection-grid" class="collection-grid"></div>
+                <button id="back-to-menu-btn" class="main-button">Back to Menu</button>
+            </div>
+        </div>
+
+        <div id="game-screen" class="screen">
+            <canvas id="game-canvas"></canvas>
+            
+            <div id="game-ui">
+                <div id="status-bar">
+                    <div class="status-item">
+                        <span class="status-label">Fish Caught:</span>
+                        <span id="fish-count">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Legacies:</span>
+                        <span id="legacy-count">0</span>
+                    </div>
+                </div>
+
+                <div id="fishing-prompt" class="prompt-box">
+                    <p>Press SPACE to cast your line</p>
+                </div>
+
+                <div id="fishing-minigame" class="fishing-minigame hidden">
+                    <div class="minigame-container">
+                        <div class="minigame-title">Keep the fish in the green bar!</div>
+                        <div class="minigame-instruction">Hold SPACE or CLICK to move bar up</div>
+                        <div class="fishing-track">
+                            <div id="fishing-bar" class="fishing-bar"></div>
+                            <div id="fish-icon" class="fish-icon">🐟</div>
+                        </div>
+                        <div class="catch-progress">
+                            <div id="catch-progress-fill" class="catch-progress-fill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="dialog-box" class="dialog-box hidden">
+                    <div class="dialog-content">
+                        <div id="dialog-speaker" class="dialog-speaker"></div>
+                        <div id="dialog-text" class="dialog-text"></div>
+                        <div id="dialog-choices" class="dialog-choices"></div>
+                    </div>
+                </div>
+
+                <div id="legacy-notification" class="legacy-notification hidden">
+                    <div class="legacy-content">
+                        <h3>Legacy Unlocked</h3>
+                        <p id="legacy-text"></p>
+                    </div>
+                </div>
+
+                <div id="fish-caught-notification" class="fish-caught-notification hidden">
+                    <div class="fish-caught-content">
+                        <div id="new-fish-badge" class="new-badge">NEW!</div>
+                        <h3 id="caught-fish-name"></h3>
+                        <p id="caught-fish-desc"></p>
+                    </div>
+                </div>
+
+                <div id="escape-menu" class="escape-menu hidden">
+                    <div class="escape-menu-content">
+                        <h2>Paused</h2>
+                        <div class="escape-menu-buttons">
+                            <button id="resume-btn" class="escape-button">Resume Game</button>
+                            <button id="settings-btn" class="escape-button">Settings</button>
+                            <button id="main-menu-btn" class="escape-button">Main Menu</button>
+                        </div>
+                        <p class="hint-text">Press ESC to resume</p>
+                    </div>
+                </div>
+
+                <div id="settings-menu" class="settings-menu hidden">
+                    <div class="settings-content">
+                        <h2>Settings</h2>
+                        
+                        <div class="setting-item">
+                            <label for="music-volume">Music Volume</label>
+                            <input type="range" id="music-volume" min="0" max="100" value="50">
+                        </div>
+                        
+                        <div class="setting-item">
+                            <label for="sfx-volume">Sound Effects</label>
+                            <input type="range" id="sfx-volume" min="0" max="100" value="50">
+                        </div>
+                        
+                        <div class="setting-item">
+                            <label for="tutorial-toggle">
+                                <input type="checkbox" id="tutorial-toggle" checked>
+                                Show Tutorial Hints
+                            </label>
+                        </div>
+                        
+                        <button id="close-settings-btn" class="main-button">Back</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ending-screen" class="screen">
+            <div class="ending-content">
+                <h2>Your Time at Walden</h2>
+                <div id="ending-summary"></div>
+                <div id="legacy-map"></div>
+                <button id="restart-btn" class="main-button">Return to the Pond</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
+

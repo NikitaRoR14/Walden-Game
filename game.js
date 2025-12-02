@@ -1,0 +1,1805 @@
+// Game State
+const gameState = {
+    mode: 'menu', // 'menu', 'story', 'freeplay'
+    phase: 0,
+    fishCaught: 0,
+    legacies: [],
+    choices: {},
+    isFishing: false,
+    canFish: true,
+    escapeMenuOpen: false,
+    settings: {
+        musicVolume: 0.5,
+        sfxVolume: 0.5,
+        showTutorial: true
+    },
+    atmosphere: {
+        brightness: 1.0,
+        fog: 0.0,
+        soundEnabled: true
+    },
+    fishingMinigame: {
+        active: false,
+        progress: 0,
+        barPosition: 0.5,
+        fishPosition: 0.5,
+        fishVelocity: 0,
+        barSize: 0.3,
+        difficulty: 1,
+        currentFish: null
+    },
+    collection: {
+        caught: new Set(),
+        totalSpecies: 8
+    }
+};
+
+// Fish species based on Thoreau's life and works
+const fishSpecies = [
+    {
+        id: 'perch',
+        name: 'Yellow Perch',
+        description: 'Common in Walden Pond, Thoreau wrote about their golden scales shimmering in the depths.',
+        rarity: 'common',
+        emoji: '🐟'
+    },
+    {
+        id: 'pickerel',
+        name: 'Chain Pickerel',
+        description: 'The fierce predator of Walden. Thoreau admired their wild nature and hunting prowess.',
+        rarity: 'common',
+        emoji: '🐠'
+    },
+    {
+        id: 'pout',
+        name: 'Horned Pout',
+        description: 'The humble catfish that Thoreau caught at midnight, "grunting" as they surfaced.',
+        rarity: 'uncommon',
+        emoji: '🐡'
+    },
+    {
+        id: 'bream',
+        name: 'Bream',
+        description: 'A philosophical fish - Thoreau pondered their purpose while fishing by moonlight.',
+        rarity: 'uncommon',
+        emoji: '🐟'
+    },
+    {
+        id: 'trout',
+        name: 'Brook Trout',
+        description: 'The poet\'s fish. Thoreau saw them as symbols of wilderness and purity.',
+        rarity: 'rare',
+        emoji: '🐠'
+    },
+    {
+        id: 'shiner',
+        name: 'Golden Shiner',
+        description: 'Small but brilliant. Thoreau used them as bait, but admired their metallic beauty.',
+        rarity: 'common',
+        emoji: '🐟'
+    },
+    {
+        id: 'eel',
+        name: 'American Eel',
+        description: 'Mysterious travelers. Thoreau marveled at their migrations across the Atlantic.',
+        rarity: 'rare',
+        emoji: '🐍'
+    },
+    {
+        id: 'salmon',
+        name: 'Atlantic Salmon',
+        description: 'Once abundant, now rare. Thoreau lamented their decline due to dams and industry.',
+        rarity: 'legendary',
+        emoji: '🐟'
+    }
+];
+
+// Game Phases
+const phases = [
+    {
+        name: "The Mentor",
+        speaker: "Ralph Waldo Emerson",
+        text: '"Henry! The town is talking. They say you are wasting your life here doing nothing but watching the water. Come back to the city. We have a lecture to attend."',
+        choices: [
+            {
+                label: '[A] Conform: "Perhaps you are right, Waldo. I am missing out on the news of the world."',
+                key: 'conform',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.fog = 0.4;
+                    gameState.atmosphere.brightness = 0.7;
+                }
+            },
+            {
+                label: '[B] Transcend: "I have three chairs in my house: one for solitude, two for friendship, three for society. But here? I have the sun. Why would I trade a morning with the birds for a lecture room?"',
+                key: 'transcend',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = 1.3;
+                },
+                legacy: 'Nature'
+            }
+        ]
+    },
+    {
+        name: "The State",
+        speaker: "Sam Staples - The Tax Collector",
+        text: '"Mr. Thoreau. You haven\'t paid your poll tax in years. The money supports the war in Mexico. If you don\'t pay now, I have to take you to jail."',
+        choices: [
+            {
+                label: '[A] Conform: "Here is the money, Sam. I don\'t want any trouble with the law."',
+                key: 'conform',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.soundEnabled = false;
+                    gameState.atmosphere.brightness = 0.6;
+                }
+            },
+            {
+                label: '[B] Transcend: "I cannot fund a state that supports slavery and unjust wars. Under a government which imprisons any unjustly, the true place for a just man is also a prison."',
+                key: 'transcend',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.min(gameState.atmosphere.brightness + 0.2, 1.5);
+                },
+                legacy: 'Civil Disobedience'
+            }
+        ]
+    },
+    {
+        name: "The Railroad",
+        speaker: "Internal Thought",
+        text: 'The Fitchburg Railroad... It cuts through the woods. It represents commerce, speed, and "progress."',
+        choices: [
+            {
+                label: '[A] Cynical: "It is ruining the silence. Technology is the enemy."',
+                key: 'cynical',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.fog = Math.min(gameState.atmosphere.fog + 0.3, 0.6);
+                }
+            },
+            {
+                label: '[B] Reflective: "We do not ride on the railroad; it rides upon us. I will keep my life simple, so I do not need the speed of the train to get nowhere."',
+                key: 'reflective',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.min(gameState.atmosphere.brightness + 0.1, 1.5);
+                },
+                legacy: 'Simplicity'
+            }
+        ]
+    },
+    {
+        name: "The Visitor",
+        speaker: "Alex Therien - The Woodchopper",
+        text: '"Mr. Thoreau! I\'ve been cutting wood all day. Tell me, what use is all your reading and writing? A man needs work, wages, and a roof over his family. What does philosophy put on the table?"',
+        choices: [
+            {
+                label: '[A] Academic: "You are right, Alex. Perhaps I should return to practical matters and stop this foolish experiment."',
+                key: 'practical',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.max(gameState.atmosphere.brightness - 0.2, 0.5);
+                }
+            },
+            {
+                label: '[B] Transcendent: "The mass of men lead lives of quiet desperation. What is called resignation is confirmed desperation. I came here to live deliberately, not to live what is not life."',
+                key: 'deliberate',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.min(gameState.atmosphere.brightness + 0.15, 1.5);
+                },
+                legacy: 'Deliberate Living'
+            }
+        ]
+    },
+    {
+        name: "The Books",
+        speaker: "Internal Thought",
+        text: 'My neighbors think I am lazy because I read Homer and study the classics instead of working from dawn to dusk. But what is the harvest of reading compared to the harvest of corn?',
+        choices: [
+            {
+                label: '[A] Defensive: "Maybe they are right. I should spend more time on profitable labor."',
+                key: 'conform',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.fog = Math.min(gameState.atmosphere.fog + 0.2, 0.6);
+                }
+            },
+            {
+                label: '[B] Principled: "Books are the treasured wealth of the world. The works of genius belong to no single age, but to all time. I will not trade eternal wisdom for temporary comfort."',
+                key: 'wisdom',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.min(gameState.atmosphere.brightness + 0.2, 1.5);
+                },
+                legacy: 'Self-Education'
+            }
+        ]
+    },
+    {
+        name: "The Cost",
+        speaker: "A Merchant from Concord",
+        text: '"Thoreau, I heard your cabin cost only $28 to build. But a proper house costs $800! How can you live with so little? Don\'t you want fine furniture, a barn, livestock? You\'ll never accumulate wealth this way."',
+        choices: [
+            {
+                label: '[A] Aspirational: "You have a point. I should work harder to afford what others have."',
+                key: 'materialism',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.max(gameState.atmosphere.brightness - 0.3, 0.5);
+                    gameState.atmosphere.fog = Math.min(gameState.atmosphere.fog + 0.2, 0.6);
+                }
+            },
+            {
+                label: '[B] Free: "The cost of a thing is the amount of life which is required to be exchanged for it. My wealth is in the mornings I own, not the things I possess. I am richer than you."',
+                key: 'freedom',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.min(gameState.atmosphere.brightness + 0.25, 1.5);
+                },
+                legacy: 'Anti-Consumerism'
+            }
+        ]
+    },
+    {
+        name: "The Wild",
+        speaker: "Internal Thought",
+        text: 'I have walked four miles today through the woods, observing. Society says I am wasting time. But in wildness is the preservation of the world. Should I abandon these walks for society\'s approval?',
+        choices: [
+            {
+                label: '[A] Conform: "Perhaps I should limit my wandering and be more productive with my time."',
+                key: 'restrain',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.soundEnabled = false;
+                    gameState.atmosphere.fog = Math.min(gameState.atmosphere.fog + 0.3, 0.6);
+                }
+            },
+            {
+                label: '[B] Wild: "I wish to speak a word for Nature, for absolute freedom and wildness. Give me a wildness whose glance no civilization can endure. I am refreshed by my walks."',
+                key: 'wild',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = Math.min(gameState.atmosphere.brightness + 0.2, 1.5);
+                    gameState.atmosphere.soundEnabled = true;
+                },
+                legacy: 'Wilderness Preservation'
+            }
+        ]
+    },
+    {
+        name: "The Question",
+        speaker: "A Young Student",
+        text: '"Mr. Thoreau, why did you leave the woods after two years? Did you fail? My father says you gave up and moved back home. Was your experiment a mistake?"',
+        choices: [
+            {
+                label: '[A] Defeated: "Your father is right. I learned nothing and should not have come here at all."',
+                key: 'failure',
+                result: 'negative',
+                effect: () => {
+                    gameState.atmosphere.brightness = 0.4;
+                    gameState.atmosphere.fog = 0.6;
+                }
+            },
+            {
+                label: '[B] Complete: "I left the woods for as good a reason as I went there. I had several more lives to live, and I did not wish to spend any more time on that one. I learned that if one advances confidently in the direction of his dreams, he will meet with a success unexpected in common hours."',
+                key: 'success',
+                result: 'positive',
+                effect: () => {
+                    gameState.atmosphere.brightness = 1.5;
+                    gameState.atmosphere.fog = 0;
+                    gameState.atmosphere.soundEnabled = true;
+                },
+                legacy: 'Individual Path'
+            }
+        ]
+    }
+];
+
+// Legacy connections
+const legacyConnections = {
+    'Nature': {
+        location: 'California (Yosemite)',
+        text: 'Your love of the wild inspired John Muir. Because of you, the National Parks were born.'
+    },
+    'Civil Disobedience': {
+        location: 'South Africa/India',
+        text: 'Your refusal to pay the tax was read by a lawyer named Gandhi. He carried your words while fighting for India\'s freedom.'
+    },
+    'Simplicity': {
+        location: 'The Future (Modern City)',
+        text: 'In a world of smartphones and noise, people still read Walden to find peace. Your experiment worked.'
+    },
+    'Deliberate Living': {
+        location: 'Worldwide',
+        text: 'Your words "live deliberately" became a mantra for millions seeking meaning over material success. You taught people to question the default path.'
+    },
+    'Self-Education': {
+        location: 'Universities & Libraries',
+        text: 'Your belief in self-directed learning inspired alternative education movements. Countless autodidacts followed your example, proving wisdom needs no institution.'
+    },
+    'Anti-Consumerism': {
+        location: 'Modern Minimalism Movement',
+        text: 'Your economic philosophy inspired minimalists, tiny house dwellers, and those who escaped the rat race. "The cost of a thing is the life exchanged for it" echoes in every life simplified.'
+    },
+    'Wilderness Preservation': {
+        location: 'Conservation Movements',
+        text: 'Your essay "Walking" and cry that "in wildness is the preservation of the world" became foundational to wilderness preservation. Aldo Leopold, Rachel Carson, and Edward Abbey carried your torch.'
+    },
+    'Individual Path': {
+        location: 'Hearts Everywhere',
+        text: 'Your final lesson—that you had other lives to live—freed countless people to change course. You proved it\'s never too late to advance confidently toward one\'s dreams.'
+    }
+};
+
+// Canvas and rendering
+let canvas, ctx;
+let particles = [];
+let fishingLine = null;
+let bobber = null;
+
+// Animation frame
+let lastTime = 0;
+let gameLoopRunning = false;
+
+// Sound Manager
+const soundManager = {
+    sounds: {},
+    music: null,
+    initialized: false,
+    
+    init() {
+        if (this.initialized) return;
+        
+        // Define all sound effects with fallback to silent
+        this.sounds = {
+            // UI Sounds
+            buttonClick: this.createSound('assets/sounds/button_click.mp3', 0.3),
+            buttonHover: this.createSound('assets/sounds/button_hover.mp3', 0.2),
+            menuOpen: this.createSound('assets/sounds/menu_open.mp3', 0.3),
+            menuClose: this.createSound('assets/sounds/menu_close.mp3', 0.3),
+            
+            // Fishing Sounds
+            castLine: this.createSound('assets/sounds/cast_line.mp3', 0.4),
+            waterSplash: this.createSound('assets/sounds/water_splash.mp3', 0.5),
+            reeling: this.createSound('assets/sounds/reeling.mp3', 0.3),
+            fishCaught: this.createSound('assets/sounds/fish_caught.mp3', 0.6),
+            
+            // Dialog Sounds
+            dialogOpen: this.createSound('assets/sounds/dialog_open.mp3', 0.3),
+            textType: this.createSound('assets/sounds/text_type.mp3', 0.15),
+            
+            // Ambient Sounds
+            birds: this.createSound('assets/sounds/birds.mp3', 0.2, true),
+            waterAmbient: this.createSound('assets/sounds/water_ambient.mp3', 0.15, true),
+            wind: this.createSound('assets/sounds/wind.mp3', 0.1, true)
+        };
+        
+        // Background music
+        this.music = this.createSound('assets/sounds/background_music.mp3', 0.3, true);
+        
+        this.initialized = true;
+    },
+    
+    createSound(src, defaultVolume = 0.5, loop = false) {
+        const audio = new Audio();
+        audio.src = src;
+        audio.loop = loop;
+        audio.volume = defaultVolume;
+        audio.defaultVolume = defaultVolume;
+        
+        // Handle missing audio files gracefully
+        audio.addEventListener('error', () => {
+            console.log(`Audio file not found: ${src} (This is normal if you haven't added sound files yet)`);
+        });
+        
+        return audio;
+    },
+    
+    play(soundName) {
+        if (!this.sounds[soundName]) return;
+        
+        const sound = this.sounds[soundName];
+        sound.volume = sound.defaultVolume * gameState.settings.sfxVolume;
+        
+        // Reset and play
+        sound.currentTime = 0;
+        sound.play().catch(() => {
+            // Silently fail if audio can't play (user hasn't interacted yet)
+        });
+    },
+    
+    playMusic() {
+        if (!this.music) return;
+        
+        this.music.volume = this.music.defaultVolume * gameState.settings.musicVolume;
+        this.music.play().catch(() => {
+            // Auto-play might be blocked, will play after user interaction
+        });
+    },
+    
+    stopMusic() {
+        if (this.music) {
+            this.music.pause();
+            this.music.currentTime = 0;
+        }
+    },
+    
+    updateMusicVolume() {
+        if (this.music) {
+            this.music.volume = this.music.defaultVolume * gameState.settings.musicVolume;
+        }
+    },
+    
+    updateSFXVolume() {
+        // Update ambient sounds
+        ['birds', 'waterAmbient', 'wind'].forEach(soundName => {
+            if (this.sounds[soundName]) {
+                this.sounds[soundName].volume = this.sounds[soundName].defaultVolume * gameState.settings.sfxVolume;
+            }
+        });
+    },
+    
+    playAmbient() {
+        if (gameState.atmosphere.soundEnabled) {
+            this.play('birds');
+            this.play('waterAmbient');
+            this.play('wind');
+        }
+    },
+    
+    stopAmbient() {
+        ['birds', 'waterAmbient', 'wind'].forEach(soundName => {
+            if (this.sounds[soundName]) {
+                this.sounds[soundName].pause();
+            }
+        });
+    },
+    
+    stopAll() {
+        Object.values(this.sounds).forEach(sound => {
+            sound.pause();
+            sound.currentTime = 0;
+        });
+        this.stopMusic();
+    }
+};
+
+// Initialize game
+function init() {
+    canvas = document.getElementById('game-canvas');
+    ctx = canvas.getContext('2d');
+    
+    // Set canvas size
+    canvas.width = 1000;
+    canvas.height = 600;
+    
+    // Initialize sound system
+    soundManager.init();
+    
+    // Menu buttons with sound effects
+    const addButtonSound = (id, callback) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.addEventListener('mouseenter', () => soundManager.play('buttonHover'));
+            btn.addEventListener('click', () => {
+                soundManager.play('buttonClick');
+                callback();
+            });
+        }
+    };
+    
+    addButtonSound('story-mode-btn', startStoryMode);
+    addButtonSound('freeplay-mode-btn', startFreePlayMode);
+    addButtonSound('view-collection-btn', viewCollection);
+    addButtonSound('back-to-menu-btn', backToMenu);
+    addButtonSound('restart-btn', restartGame);
+    addButtonSound('resume-btn', resumeGame);
+    addButtonSound('settings-btn', openSettings);
+    addButtonSound('main-menu-btn', returnToMainMenu);
+    addButtonSound('close-settings-btn', closeSettings);
+    
+    // Settings controls
+    const musicSlider = document.getElementById('music-volume');
+    const sfxSlider = document.getElementById('sfx-volume');
+    const tutorialToggle = document.getElementById('tutorial-toggle');
+    
+    if (musicSlider) {
+        musicSlider.addEventListener('input', (e) => {
+            gameState.settings.musicVolume = e.target.value / 100;
+            soundManager.updateMusicVolume();
+        });
+    }
+    
+    if (sfxSlider) {
+        sfxSlider.addEventListener('input', (e) => {
+            gameState.settings.sfxVolume = e.target.value / 100;
+            soundManager.updateSFXVolume();
+            // Play a test sound
+            soundManager.play('waterSplash');
+        });
+    }
+    
+    if (tutorialToggle) {
+        tutorialToggle.addEventListener('change', (e) => {
+            gameState.settings.showTutorial = e.target.checked;
+        });
+    }
+    
+    // Keyboard controls
+    document.addEventListener('keydown', handleKeyPress);
+    
+    // Initialize particles
+    createParticles();
+    
+    // Show main menu
+    showMainMenu();
+}
+
+function showMainMenu() {
+    // Reset escape menu state
+    gameState.escapeMenuOpen = false;
+    isHoldingBar = false;
+    
+    // Hide any open menus
+    const escapeMenu = document.getElementById('escape-menu');
+    const settingsMenu = document.getElementById('settings-menu');
+    if (escapeMenu) escapeMenu.classList.add('hidden');
+    if (settingsMenu) settingsMenu.classList.add('hidden');
+    
+    // Hide all screens
+    const screens = ['game-screen', 'ending-screen', 'collection-screen', 'main-menu'];
+    screens.forEach(screenId => {
+        const element = document.getElementById(screenId);
+        if (element) {
+            element.classList.remove('active');
+        }
+    });
+    
+    // Show main menu
+    const mainMenu = document.getElementById('main-menu');
+    if (mainMenu) {
+        mainMenu.classList.add('active');
+    }
+    
+    gameState.mode = 'menu';
+}
+
+function startStoryMode() {
+    gameState.mode = 'story';
+    resetGameState();
+    document.getElementById('main-menu').classList.remove('active');
+    document.getElementById('game-screen').classList.add('active');
+    
+    // Show status bar for story mode
+    const statusBar = document.getElementById('status-bar');
+    if (statusBar) {
+        statusBar.style.display = 'flex';
+    }
+    
+    // Start music and ambient sounds
+    soundManager.playMusic();
+    soundManager.playAmbient();
+    
+    // Only start game loop if not already running
+    if (!gameLoopRunning) {
+        gameLoopRunning = true;
+        gameLoop();
+    }
+}
+
+function startFreePlayMode() {
+    gameState.mode = 'freeplay';
+    resetGameState();
+    document.getElementById('main-menu').classList.remove('active');
+    document.getElementById('game-screen').classList.add('active');
+    
+    // Hide legacies counter in free play
+    const statusBar = document.getElementById('status-bar');
+    if (statusBar) {
+        statusBar.style.display = 'none';
+    }
+    
+    // Start music and ambient sounds
+    soundManager.playMusic();
+    soundManager.playAmbient();
+    
+    // Only start game loop if not already running
+    if (!gameLoopRunning) {
+        gameLoopRunning = true;
+        gameLoop();
+    }
+}
+
+function viewCollection() {
+    showCollectionScreen();
+}
+
+function backToMenu() {
+    showMainMenu();
+}
+
+function resetGameState() {
+    gameState.phase = 0;
+    gameState.fishCaught = 0;
+    gameState.legacies = [];
+    gameState.choices = {};
+    gameState.isFishing = false;
+    gameState.canFish = true;
+    gameState.escapeMenuOpen = false;
+    gameState.atmosphere = {
+        brightness: 1.0,
+        fog: 0.0,
+        soundEnabled: true
+    };
+    gameState.fishingMinigame = {
+        active: false,
+        progress: 0,
+        barPosition: 0.5,
+        fishPosition: 0.5,
+        fishVelocity: 0,
+        barSize: 0.3,
+        difficulty: 1,
+        currentFish: null
+    };
+    
+    // Reset global variables
+    isHoldingBar = false;
+    particles = [];
+    fishingLine = null;
+    bobber = null;
+    
+    // Hide any open menus
+    const escapeMenu = document.getElementById('escape-menu');
+    const settingsMenu = document.getElementById('settings-menu');
+    const fishingMinigame = document.getElementById('fishing-minigame');
+    const fishingPrompt = document.getElementById('fishing-prompt');
+    
+    if (escapeMenu) escapeMenu.classList.add('hidden');
+    if (settingsMenu) settingsMenu.classList.add('hidden');
+    if (fishingMinigame) fishingMinigame.classList.add('hidden');
+    if (fishingPrompt) fishingPrompt.classList.remove('hidden');
+    
+    createParticles();
+}
+
+function restartGame() {
+    document.getElementById('ending-screen').classList.remove('active');
+    showMainMenu();
+}
+
+function handleKeyPress(e) {
+    // Escape menu
+    if (e.code === 'Escape') {
+        e.preventDefault();
+        toggleEscapeMenu();
+        return;
+    }
+    
+    // Don't process other keys if escape menu is open
+    if (gameState.escapeMenuOpen) {
+        return;
+    }
+    
+    if (e.code === 'Space' && gameState.canFish && !gameState.isFishing) {
+        e.preventDefault();
+        startFishing();
+    }
+    
+    // Fishing minigame controls
+    if (gameState.fishingMinigame.active) {
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+            e.preventDefault();
+            gameState.fishingMinigame.barPosition = Math.max(0, gameState.fishingMinigame.barPosition - 0.15);
+        }
+    }
+}
+
+function toggleEscapeMenu() {
+    const escapeMenu = document.getElementById('escape-menu');
+    
+    if (gameState.mode === 'menu' || gameState.mode === 'collection') {
+        // Don't show escape menu on main menu or collection screen
+        return;
+    }
+    
+    gameState.escapeMenuOpen = !gameState.escapeMenuOpen;
+    
+    if (gameState.escapeMenuOpen) {
+        soundManager.play('menuOpen');
+        escapeMenu.classList.remove('hidden');
+    } else {
+        soundManager.play('menuClose');
+        escapeMenu.classList.add('hidden');
+    }
+}
+
+function resumeGame() {
+    gameState.escapeMenuOpen = false;
+    soundManager.play('menuClose');
+    document.getElementById('escape-menu').classList.add('hidden');
+}
+
+function returnToMainMenu() {
+    gameState.escapeMenuOpen = false;
+    document.getElementById('escape-menu').classList.add('hidden');
+    soundManager.stopAmbient();
+    showMainMenu();
+}
+
+function openSettings() {
+    soundManager.play('menuOpen');
+    document.getElementById('escape-menu').classList.add('hidden');
+    document.getElementById('settings-menu').classList.remove('hidden');
+}
+
+function closeSettings() {
+    soundManager.play('menuClose');
+    document.getElementById('settings-menu').classList.add('hidden');
+    document.getElementById('escape-menu').classList.remove('hidden');
+}
+
+// Add mouse/touch control for fishing minigame
+let isHoldingBar = false;
+
+document.addEventListener('mousedown', (e) => {
+    if (gameState.fishingMinigame.active) {
+        isHoldingBar = true;
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    isHoldingBar = false;
+});
+
+document.addEventListener('touchstart', (e) => {
+    if (gameState.fishingMinigame.active) {
+        isHoldingBar = true;
+    }
+});
+
+document.addEventListener('touchend', (e) => {
+    isHoldingBar = false;
+});
+
+function startFishing() {
+    if (!gameState.canFish) return;
+    
+    gameState.isFishing = true;
+    document.getElementById('fishing-prompt').classList.add('hidden');
+    
+    // Play casting sound
+    soundManager.play('castLine');
+    
+    // Create fishing line animation
+    fishingLine = {
+        startX: canvas.width * 0.7,
+        startY: canvas.height * 0.6,
+        endX: canvas.width * 0.5,
+        endY: canvas.height * 0.8,
+        progress: 0,
+        castTime: 0
+    };
+    
+    // Wait for line to be cast, then start minigame
+    setTimeout(() => {
+        soundManager.play('waterSplash');
+        startFishingMinigame();
+    }, 1500);
+}
+
+function startFishingMinigame() {
+    // Select a random fish
+    if (gameState.mode === 'freeplay') {
+        const rarityRoll = Math.random();
+        let availableFish;
+        
+        if (rarityRoll < 0.5) {
+            availableFish = fishSpecies.filter(f => f.rarity === 'common');
+        } else if (rarityRoll < 0.8) {
+            availableFish = fishSpecies.filter(f => f.rarity === 'uncommon');
+        } else if (rarityRoll < 0.95) {
+            availableFish = fishSpecies.filter(f => f.rarity === 'rare');
+        } else {
+            availableFish = fishSpecies.filter(f => f.rarity === 'legendary');
+        }
+        
+        gameState.fishingMinigame.currentFish = availableFish[Math.floor(Math.random() * availableFish.length)];
+    }
+    
+    gameState.fishingMinigame.active = true;
+    gameState.fishingMinigame.progress = 0;
+    gameState.fishingMinigame.barPosition = 0.5;
+    gameState.fishingMinigame.fishPosition = Math.random() * 0.6 + 0.2;
+    gameState.fishingMinigame.fishVelocity = (Math.random() - 0.5) * 0.015; // Reduced from 0.02
+    gameState.fishingMinigame.barSize = 0.3; // Increased from 0.25
+    gameState.fishingMinigame.startTime = Date.now();
+    
+    document.getElementById('fishing-minigame').classList.remove('hidden');
+}
+
+function updateFishingMinigame() {
+    if (!gameState.fishingMinigame.active || gameState.escapeMenuOpen) return;
+    
+    const minigame = gameState.fishingMinigame;
+    
+    // Fish AI - smoother, less erratic movement
+    minigame.fishVelocity += (Math.random() - 0.5) * 0.005; // Reduced from 0.008
+    minigame.fishVelocity *= 0.97; // Increased damping from 0.95
+    minigame.fishPosition += minigame.fishVelocity;
+    
+    // Keep fish in bounds
+    if (minigame.fishPosition < 0.1) {
+        minigame.fishPosition = 0.1;
+        minigame.fishVelocity *= -0.5;
+    }
+    if (minigame.fishPosition > 0.9) {
+        minigame.fishPosition = 0.9;
+        minigame.fishVelocity *= -0.5;
+    }
+    
+    // Bar physics - smoother control
+    if (isHoldingBar) {
+        minigame.barPosition = Math.max(0, minigame.barPosition - 0.02); // Reduced from 0.03
+    } else {
+        minigame.barPosition = Math.min(1, minigame.barPosition + 0.018); // Reduced from 0.025
+    }
+    
+    // Check if fish is in bar
+    const barTop = minigame.barPosition;
+    const barBottom = minigame.barPosition + minigame.barSize;
+    
+    if (minigame.fishPosition >= barTop && minigame.fishPosition <= barBottom) {
+        minigame.progress += 0.012; // Reduced from 0.02 to make it take longer
+    } else {
+        minigame.progress -= 0.006; // Reduced from 0.008 for slightly more challenge
+    }
+    
+    minigame.progress = Math.max(0, Math.min(1, minigame.progress));
+    
+    // Update UI
+    const progressBar = document.getElementById('catch-progress-fill');
+    const fishIcon = document.getElementById('fish-icon');
+    const barElement = document.getElementById('fishing-bar');
+    
+    if (progressBar) progressBar.style.height = `${minigame.progress * 100}%`;
+    if (fishIcon) {
+        fishIcon.style.top = `${minigame.fishPosition * 100}%`;
+        // Update fish emoji in free play mode
+        if (gameState.mode === 'freeplay' && minigame.currentFish) {
+            fishIcon.textContent = minigame.currentFish.emoji;
+        }
+    }
+    if (barElement) barElement.style.top = `${minigame.barPosition * 100}%`;
+    
+    // Win condition
+    if (minigame.progress >= 1) {
+        endFishingMinigame(true);
+    }
+    
+    // Lose condition
+    if (minigame.progress <= 0 && Date.now() - minigame.startTime > 2000) {
+        // Give player a bit of time before they can fail
+        // Actually, let's make it forgiving - they can't fail
+    }
+}
+
+function endFishingMinigame(success) {
+    gameState.fishingMinigame.active = false;
+    document.getElementById('fishing-minigame').classList.add('hidden');
+    
+    if (success) {
+        soundManager.play('fishCaught');
+        setTimeout(() => {
+            catchFish();
+        }, 500);
+    } else {
+        // Reset for another try
+        gameState.isFishing = false;
+        fishingLine = null;
+        enableFishing();
+    }
+}
+
+function catchFish() {
+    gameState.fishCaught++;
+    gameState.isFishing = false;
+    fishingLine = null;
+    
+    document.getElementById('fish-count').textContent = gameState.fishCaught;
+    
+    if (gameState.mode === 'freeplay') {
+        // Free play mode - show fish caught notification
+        const fish = gameState.fishingMinigame.currentFish;
+        const isNew = !gameState.collection.caught.has(fish.id);
+        
+        if (isNew) {
+            gameState.collection.caught.add(fish.id);
+        }
+        
+        showFishCaughtNotification(fish, isNew);
+        
+        // Reset for next fish
+        setTimeout(() => {
+            enableFishing();
+        }, 3000);
+    } else {
+        // Story mode - show phase dialog after catching fish
+        if (gameState.phase < phases.length) {
+            setTimeout(() => {
+                showDialog(gameState.phase);
+            }, 1000);
+        } else {
+            // Game complete
+            setTimeout(() => {
+                showEnding();
+            }, 1000);
+        }
+    }
+}
+
+function showFishCaughtNotification(fish, isNew) {
+    const notification = document.getElementById('fish-caught-notification');
+    const fishName = document.getElementById('caught-fish-name');
+    const fishDesc = document.getElementById('caught-fish-desc');
+    const newBadge = document.getElementById('new-fish-badge');
+    
+    fishName.textContent = `${fish.emoji} ${fish.name}`;
+    fishDesc.textContent = fish.description;
+    newBadge.style.display = isNew ? 'block' : 'none';
+    
+    notification.classList.remove('hidden');
+    
+    setTimeout(() => {
+        notification.classList.add('hidden');
+    }, 2800);
+}
+
+// Typewriter effect for dialog
+let typewriterInterval = null;
+
+function showDialog(phaseIndex) {
+    gameState.canFish = false;
+    const phase = phases[phaseIndex];
+    
+    const dialogBox = document.getElementById('dialog-box');
+    const speaker = document.getElementById('dialog-speaker');
+    const text = document.getElementById('dialog-text');
+    const choices = document.getElementById('dialog-choices');
+    
+    // Clear any existing typewriter
+    if (typewriterInterval) {
+        clearInterval(typewriterInterval);
+    }
+    
+    // Play dialog open sound
+    soundManager.play('dialogOpen');
+    
+    speaker.textContent = phase.speaker;
+    text.textContent = '';
+    
+    // Clear previous choices and hide them initially
+    choices.innerHTML = '';
+    choices.style.display = 'none';
+    
+    dialogBox.classList.remove('hidden');
+    
+    // Typewriter effect
+    let charIndex = 0;
+    const fullText = phase.text;
+    const typeSpeed = 30; // milliseconds per character
+    
+    typewriterInterval = setInterval(() => {
+        if (charIndex < fullText.length) {
+            text.textContent += fullText[charIndex];
+            
+            // Play typing sound occasionally (not every character)
+            if (charIndex % 3 === 0) {
+                soundManager.play('textType');
+            }
+            
+            charIndex++;
+        } else {
+            clearInterval(typewriterInterval);
+            typewriterInterval = null;
+            
+            // Show choices after text is complete
+            choices.style.display = 'flex';
+            
+            phase.choices.forEach((choice, index) => {
+                const button = document.createElement('button');
+                button.className = 'choice-button';
+                button.textContent = choice.label;
+                button.style.opacity = '0';
+                button.style.animation = `fadeIn 0.3s ease-out ${index * 0.1}s forwards`;
+                button.addEventListener('mouseenter', () => soundManager.play('buttonHover'));
+                button.addEventListener('click', () => {
+                    soundManager.play('buttonClick');
+                    handleChoice(phaseIndex, index);
+                });
+                choices.appendChild(button);
+            });
+        }
+    }, typeSpeed);
+}
+
+function handleChoice(phaseIndex, choiceIndex) {
+    const phase = phases[phaseIndex];
+    const choice = phase.choices[choiceIndex];
+    
+    // Clear typewriter if still running
+    if (typewriterInterval) {
+        clearInterval(typewriterInterval);
+        typewriterInterval = null;
+    }
+    
+    // Store choice
+    gameState.choices[phase.name] = choice.key;
+    
+    // Apply effects
+    if (choice.effect) {
+        choice.effect();
+    }
+    
+    // Hide dialog
+    document.getElementById('dialog-box').classList.add('hidden');
+    
+    // Show legacy if earned
+    if (choice.legacy) {
+        gameState.legacies.push(choice.legacy);
+        setTimeout(() => {
+            showLegacy(choice.legacy);
+        }, 500);
+    } else {
+        // Move to next phase
+        gameState.phase++;
+        setTimeout(() => {
+            enableFishing();
+        }, 1000);
+    }
+}
+
+function showLegacy(legacyName) {
+    const notification = document.getElementById('legacy-notification');
+    const text = document.getElementById('legacy-text');
+    
+    text.textContent = legacyName;
+    notification.classList.remove('hidden');
+    
+    document.getElementById('legacy-count').textContent = gameState.legacies.length;
+    
+    setTimeout(() => {
+        notification.classList.add('hidden');
+        gameState.phase++;
+        
+        if (gameState.phase < phases.length) {
+            setTimeout(() => {
+                enableFishing();
+            }, 500);
+        } else {
+            setTimeout(() => {
+                showEnding();
+            }, 500);
+        }
+    }, 2500);
+}
+
+function enableFishing() {
+    gameState.canFish = true;
+    document.getElementById('fishing-prompt').classList.remove('hidden');
+}
+
+function showCollectionScreen() {
+    document.getElementById('main-menu').classList.remove('active');
+    document.getElementById('collection-screen').classList.add('active');
+    
+    const grid = document.getElementById('collection-grid');
+    grid.innerHTML = '';
+    
+    fishSpecies.forEach(fish => {
+        const isCaught = gameState.collection.caught.has(fish.id);
+        const card = document.createElement('div');
+        card.className = `fish-card ${isCaught ? 'caught' : 'locked'} rarity-${fish.rarity}`;
+        
+        card.innerHTML = `
+            <div class="fish-emoji">${isCaught ? fish.emoji : '❓'}</div>
+            <div class="fish-name">${isCaught ? fish.name : '???'}</div>
+            <div class="fish-rarity">${fish.rarity.toUpperCase()}</div>
+            ${isCaught ? `<div class="fish-desc">${fish.description}</div>` : '<div class="fish-desc">Catch this fish to unlock!</div>'}
+        `;
+        
+        grid.appendChild(card);
+    });
+    
+    const counter = document.getElementById('collection-counter');
+    counter.textContent = `${gameState.collection.caught.size} / ${fishSpecies.length} species collected`;
+}
+
+function showEnding() {
+    document.getElementById('game-screen').classList.remove('active');
+    document.getElementById('ending-screen').classList.add('active');
+    
+    const summary = document.getElementById('ending-summary');
+    const legacyMap = document.getElementById('legacy-map');
+    
+    summary.innerHTML = `
+        <p style="font-size: 1.3em; margin-bottom: 20px;">You caught <strong>${gameState.fishCaught}</strong> fish.</p>
+        <p style="font-size: 1.3em; margin-bottom: 20px;">But more importantly, you caught <strong>${gameState.legacies.length}</strong> ${gameState.legacies.length === 1 ? 'idea' : 'ideas'}.</p>
+        ${gameState.legacies.length === 8 ? '<p style="font-size: 1.1em; margin-bottom: 20px; color: #d4af37; font-weight: bold;">You embraced all of Thoreau\'s teachings. Perfect transcendence!</p>' : ''}
+    `;
+    
+    legacyMap.innerHTML = '';
+    
+    if (gameState.legacies.length > 0) {
+        gameState.legacies.forEach((legacy, index) => {
+            const connection = legacyConnections[legacy];
+            const item = document.createElement('div');
+            item.className = 'legacy-item';
+            item.style.animationDelay = `${index * 0.3}s`;
+            item.innerHTML = `
+                <h3>${legacy} → ${connection.location}</h3>
+                <p>${connection.text}</p>
+            `;
+            legacyMap.appendChild(item);
+        });
+    } else {
+        legacyMap.innerHTML = '<p style="text-align: center; color: #6b8e9f; font-style: italic;">You completed your experiment, but your words did not echo through time. Perhaps another path awaited you at the pond.</p>';
+    }
+}
+
+// Rendering
+function createParticles() {
+    // Water sparkles
+    for (let i = 0; i < 30; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: canvas.height * 0.65 + Math.random() * (canvas.height * 0.35),
+            size: Math.random() * 2 + 1,
+            speedY: Math.random() * 0.2 - 0.1,
+            alpha: Math.random() * 0.5 + 0.2,
+            type: 'sparkle'
+        });
+    }
+    
+    // Birds
+    for (let i = 0; i < 3; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height * 0.3,
+            speedX: Math.random() * 0.5 + 0.3,
+            type: 'bird'
+        });
+    }
+}
+
+function gameLoop(timestamp = 0) {
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Render scene
+    renderScene();
+    
+    // Update fishing minigame (only if not paused)
+    if (gameState.fishingMinigame.active && !gameState.escapeMenuOpen) {
+        updateFishingMinigame();
+    }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function renderScene() {
+    const brightness = gameState.atmosphere.brightness;
+    const fog = gameState.atmosphere.fog;
+    const time = Date.now() / 10000;
+    
+    // Sky gradient - more natural colors with depth
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+    skyGradient.addColorStop(0, adjustBrightness('#5a7fa5', brightness));
+    skyGradient.addColorStop(0.3, adjustBrightness('#7a9fb5', brightness));
+    skyGradient.addColorStop(0.7, adjustBrightness('#9fbfd8', brightness));
+    skyGradient.addColorStop(1, adjustBrightness('#c5dfe8', brightness));
+    ctx.fillStyle = skyGradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+    
+    // Add subtle clouds
+    drawClouds();
+    
+    // Sun with glow
+    const sunX = canvas.width * 0.8;
+    const sunY = canvas.height * 0.15;
+    const sunSize = 35 * Math.min(brightness, 1.2);
+    
+    // Sun glow
+    if (brightness > 0.9) {
+        const glowGradient = ctx.createRadialGradient(sunX, sunY, sunSize * 0.5, sunX, sunY, sunSize * 3);
+        glowGradient.addColorStop(0, `rgba(255, 220, 100, ${0.3 * brightness})`);
+        glowGradient.addColorStop(1, 'rgba(255, 220, 100, 0)');
+        ctx.fillStyle = glowGradient;
+        ctx.fillRect(sunX - sunSize * 3, sunY - sunSize * 3, sunSize * 6, sunSize * 6);
+    }
+    
+    // Sun body
+    ctx.fillStyle = adjustBrightness('#ffd95a', brightness);
+    ctx.globalAlpha = Math.min(brightness * 0.9, 1);
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunSize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    // Distant trees (background)
+    drawDistantTrees();
+    
+    // Trees (mid-ground)
+    drawTrees();
+    
+    // Water with enhanced gradient and depth
+    const waterGradient = ctx.createLinearGradient(0, canvas.height * 0.65, 0, canvas.height);
+    waterGradient.addColorStop(0, adjustBrightness('#4a7a8a', brightness));
+    waterGradient.addColorStop(0.3, adjustBrightness('#3a6a7a', brightness));
+    waterGradient.addColorStop(0.7, adjustBrightness('#2a5a6a', brightness));
+    waterGradient.addColorStop(1, adjustBrightness('#1a4a5a', brightness));
+    ctx.fillStyle = waterGradient;
+    ctx.fillRect(0, canvas.height * 0.65, canvas.width, canvas.height * 0.35);
+    
+    // Water surface shimmer effect
+    drawWaterShimmer();
+    
+    // Water ripples and waves
+    drawWaterWaves(time);
+    
+    // Lily pads and water plants
+    drawWaterPlants();
+    
+    // Water sparkles
+    particles.forEach(particle => {
+        if (particle.type === 'sparkle' && gameState.atmosphere.soundEnabled) {
+            const twinkle = Math.sin(Date.now() / 500 + particle.x) * 0.3 + 0.7;
+            ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha * twinkle})`;
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            particle.y += particle.speedY;
+            if (particle.y < canvas.height * 0.65 || particle.y > canvas.height) {
+                particle.y = canvas.height * 0.65 + Math.random() * (canvas.height * 0.35);
+            }
+        }
+    });
+    
+    // Birds
+    particles.forEach(particle => {
+        if (particle.type === 'bird' && gameState.atmosphere.soundEnabled) {
+            drawBird(particle.x, particle.y);
+            particle.x += particle.speedX;
+            if (particle.x > canvas.width + 50) {
+                particle.x = -50;
+                particle.y = Math.random() * canvas.height * 0.3;
+            }
+        }
+    });
+    
+    // Shore (more detailed)
+    drawShore();
+    
+    // Dock
+    drawDock();
+    
+    // Thoreau figure
+    drawThoreau();
+    
+    // Fishing line
+    if (fishingLine) {
+        fishingLine.progress = Math.min(fishingLine.progress + 0.015, 1);
+        const currentX = fishingLine.startX + (fishingLine.endX - fishingLine.startX) * fishingLine.progress;
+        const currentY = fishingLine.startY + (fishingLine.endY - fishingLine.startY) * fishingLine.progress;
+        
+        // Draw fishing line
+        ctx.strokeStyle = 'rgba(139, 115, 85, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(fishingLine.startX, fishingLine.startY);
+        
+        // Add curve to line for more natural look
+        const midX = (fishingLine.startX + currentX) / 2;
+        const midY = (fishingLine.startY + currentY) / 2 + 20;
+        ctx.quadraticCurveTo(midX, midY, currentX, currentY);
+        ctx.stroke();
+        
+        // Bobber with animation
+        if (gameState.fishingMinigame.active) {
+            const bobTime = Date.now() / 200;
+            const bobOffset = Math.sin(bobTime) * 3;
+            
+            // Bobber shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.ellipse(currentX, currentY + 8, 6, 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Bobber body
+            ctx.fillStyle = '#FF6B6B';
+            ctx.beginPath();
+            ctx.arc(currentX, currentY + bobOffset, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Bobber highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.beginPath();
+            ctx.arc(currentX - 2, currentY + bobOffset - 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Ripples
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 2; i++) {
+                ctx.beginPath();
+                ctx.arc(currentX, currentY + 3, 10 + i * 8, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        } else {
+            // Bobber before minigame
+            ctx.fillStyle = '#FF6B6B';
+            ctx.beginPath();
+            ctx.arc(currentX, currentY, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Fog overlay
+    if (fog > 0) {
+        ctx.fillStyle = `rgba(128, 128, 128, ${fog * 0.4})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+}
+
+function drawClouds() {
+    const brightness = gameState.atmosphere.brightness;
+    const time = Date.now() / 50000;
+    
+    ctx.globalAlpha = 0.3 * brightness;
+    
+    // Multiple cloud layers for depth
+    const clouds = [
+        { x: (time * 20) % (canvas.width + 400) - 200, y: 80, scale: 1.2 },
+        { x: (time * 15 + 300) % (canvas.width + 400) - 200, y: 120, scale: 1.0 },
+        { x: (time * 10 + 600) % (canvas.width + 400) - 200, y: 50, scale: 0.8 }
+    ];
+    
+    clouds.forEach(cloud => {
+        ctx.fillStyle = adjustBrightness('#ffffff', brightness);
+        
+        // Draw fluffy cloud shape
+        ctx.beginPath();
+        ctx.arc(cloud.x, cloud.y, 40 * cloud.scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 30 * cloud.scale, cloud.y, 50 * cloud.scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 70 * cloud.scale, cloud.y, 40 * cloud.scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 50 * cloud.scale, cloud.y - 20 * cloud.scale, 35 * cloud.scale, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    ctx.globalAlpha = 1;
+}
+
+function drawDistantTrees() {
+    const brightness = gameState.atmosphere.brightness;
+    
+    // Distant forest silhouette with more variety
+    ctx.globalAlpha = 0.5;
+    
+    // Far mountains/hills
+    ctx.fillStyle = adjustBrightness('#3a5a4a', brightness * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height * 0.58);
+    for (let i = 0; i <= canvas.width; i += 50) {
+        const noise = Math.sin(i * 0.01) * 20 + Math.cos(i * 0.02) * 15;
+        ctx.lineTo(i, canvas.height * 0.55 + noise);
+    }
+    ctx.lineTo(canvas.width, canvas.height * 0.65);
+    ctx.lineTo(0, canvas.height * 0.65);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.globalAlpha = 0.6;
+    
+    // Distant forest
+    ctx.fillStyle = adjustBrightness('#2a4a3a', brightness * 0.6);
+    
+    for (let i = 0; i < 20; i++) {
+        const x = (i * canvas.width / 19) - 20;
+        const y = canvas.height * 0.53;
+        const height = 70 + (Math.sin(i) * 20) + (i % 3) * 25;
+        
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 12, y + height);
+        ctx.lineTo(x + 12, y + height);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    ctx.globalAlpha = 1;
+}
+
+function drawWaterShimmer() {
+    const brightness = gameState.atmosphere.brightness;
+    const time = Date.now() / 3000;
+    
+    // Light reflection on water surface
+    ctx.globalAlpha = 0.15 * brightness;
+    const shimmerGradient = ctx.createLinearGradient(0, canvas.height * 0.65, 0, canvas.height * 0.72);
+    shimmerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+    shimmerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = shimmerGradient;
+    
+    for (let i = 0; i < 5; i++) {
+        const offsetX = Math.sin(time + i) * 50;
+        const offsetY = Math.cos(time + i * 0.5) * 10;
+        ctx.fillRect(i * 250 + offsetX, canvas.height * 0.65 + offsetY, 150, 40);
+    }
+    
+    ctx.globalAlpha = 1;
+}
+
+function drawWaterWaves(time) {
+    const brightness = gameState.atmosphere.brightness;
+    
+    ctx.strokeStyle = adjustBrightness('#5a8a9a', brightness);
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.3;
+    
+    // Animated water waves
+    for (let wave = 0; wave < 3; wave++) {
+        ctx.beginPath();
+        const yOffset = canvas.height * 0.65 + wave * 30;
+        
+        for (let x = 0; x <= canvas.width; x += 5) {
+            const y = yOffset + Math.sin((x * 0.01) + time + wave) * 3;
+            if (x === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+    
+    ctx.globalAlpha = 1;
+}
+
+function drawWaterPlants() {
+    const brightness = gameState.atmosphere.brightness;
+    
+    // Lily pads
+    const lilyPads = [
+        { x: 150, y: canvas.height * 0.75, size: 25, rotation: 0.3 },
+        { x: 280, y: canvas.height * 0.72, size: 20, rotation: -0.5 },
+        { x: 200, y: canvas.height * 0.82, size: 22, rotation: 0.8 },
+        { x: 400, y: canvas.height * 0.78, size: 18, rotation: -0.2 }
+    ];
+    
+    lilyPads.forEach(pad => {
+        ctx.save();
+        ctx.translate(pad.x, pad.y);
+        ctx.rotate(pad.rotation);
+        
+        // Lily pad shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.beginPath();
+        ctx.ellipse(2, 2, pad.size, pad.size * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Lily pad
+        ctx.fillStyle = adjustBrightness('#4a6a3a', brightness);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, pad.size, pad.size * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Lily pad notch
+        ctx.fillStyle = adjustBrightness('#3a5a2a', brightness);
+        ctx.beginPath();
+        ctx.moveTo(pad.size * 0.7, -pad.size * 0.3);
+        ctx.lineTo(pad.size, 0);
+        ctx.lineTo(pad.size * 0.7, pad.size * 0.3);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Lily pad vein
+        ctx.strokeStyle = adjustBrightness('#3a5a2a', brightness);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(pad.size * 0.8, 0);
+        ctx.stroke();
+        
+        ctx.restore();
+    });
+    
+    // Reeds in the background
+    ctx.globalAlpha = 0.6;
+    const reeds = [
+        { x: 80, heights: [40, 50, 45] },
+        { x: 120, heights: [45, 55, 48] },
+        { x: 900, heights: [42, 52, 46] },
+        { x: 950, heights: [38, 48, 44] }
+    ];
+    
+    reeds.forEach(reed => {
+        reed.heights.forEach((height, i) => {
+            const x = reed.x + i * 5;
+            const baseY = canvas.height * 0.72;
+            const sway = Math.sin(Date.now() / 800 + x) * 3;
+            
+            ctx.strokeStyle = adjustBrightness('#4a5a3a', brightness);
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x, baseY);
+            ctx.quadraticCurveTo(x + sway, baseY - height / 2, x + sway * 2, baseY - height);
+            ctx.stroke();
+            
+            // Reed top
+            ctx.fillStyle = adjustBrightness('#5a6a4a', brightness);
+            ctx.beginPath();
+            ctx.ellipse(x + sway * 2, baseY - height - 3, 2, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    });
+    
+    ctx.globalAlpha = 1;
+}
+
+function drawTrees() {
+    const brightness = gameState.atmosphere.brightness;
+    
+    // More detailed tree shapes
+    const treePositions = [
+        { x: 150, scale: 1.2, offset: 0 },
+        { x: 320, scale: 1.0, offset: 10 },
+        { x: 550, scale: 1.3, offset: -5 },
+        { x: 750, scale: 0.9, offset: 5 },
+        { x: 900, scale: 1.1, offset: 0 }
+    ];
+    
+    treePositions.forEach(tree => {
+        const x = tree.x;
+        const y = canvas.height * 0.56 + tree.offset;
+        const scale = tree.scale;
+        
+        // Trunk
+        ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+        ctx.fillRect(x - 6 * scale, y, 12 * scale, 80 * scale);
+        
+        // Tree crown - layered for depth
+        const layers = [
+            { y: y + 10 * scale, size: 45 * scale, color: '#2d5a2d' },
+            { y: y - 10 * scale, size: 40 * scale, color: '#3a6a3a' },
+            { y: y - 25 * scale, size: 35 * scale, color: '#4a7a4a' }
+        ];
+        
+        layers.forEach(layer => {
+            ctx.fillStyle = adjustBrightness(layer.color, brightness);
+            ctx.beginPath();
+            ctx.moveTo(x, layer.y - layer.size);
+            ctx.lineTo(x - layer.size, layer.y + layer.size * 0.5);
+            ctx.lineTo(x + layer.size, layer.y + layer.size * 0.5);
+            ctx.closePath();
+            ctx.fill();
+        });
+    });
+}
+
+function drawShore() {
+    const brightness = gameState.atmosphere.brightness;
+    
+    // Grass and earth with more natural edge
+    ctx.fillStyle = adjustBrightness('#4a5a3a', brightness);
+    ctx.beginPath();
+    ctx.moveTo(canvas.width * 0.55, canvas.height * 0.65);
+    
+    // Create irregular shoreline
+    for (let x = canvas.width * 0.55; x <= canvas.width; x += 20) {
+        const noise = Math.sin(x * 0.05) * 2;
+        ctx.lineTo(x, canvas.height * 0.63 + noise);
+    }
+    
+    ctx.lineTo(canvas.width, canvas.height * 0.67);
+    
+    for (let x = canvas.width; x >= canvas.width * 0.55; x -= 20) {
+        const noise = Math.cos(x * 0.05) * 2;
+        ctx.lineTo(x, canvas.height * 0.67 + noise);
+    }
+    
+    ctx.closePath();
+    ctx.fill();
+    
+    // Darker earth layer
+    ctx.fillStyle = adjustBrightness('#3a4a2a', brightness);
+    ctx.beginPath();
+    ctx.moveTo(canvas.width * 0.55, canvas.height * 0.67);
+    for (let x = canvas.width * 0.55; x <= canvas.width; x += 20) {
+        const noise = Math.cos(x * 0.05) * 2;
+        ctx.lineTo(x, canvas.height * 0.67 + noise);
+    }
+    ctx.lineTo(canvas.width, canvas.height * 0.68);
+    ctx.lineTo(canvas.width * 0.55, canvas.height * 0.68);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Add grass details with more variety
+    ctx.globalAlpha = 0.8;
+    for (let i = 0; i < 30; i++) {
+        const x = canvas.width * 0.6 + Math.random() * canvas.width * 0.35;
+        const y = canvas.height * 0.64 + Math.random() * 15;
+        const height = 8 + Math.random() * 8;
+        const sway = Math.sin(Date.now() / 1000 + i) * 2;
+        
+        ctx.strokeStyle = adjustBrightness(
+            i % 3 === 0 ? '#5a6a4a' : '#4a5a3a', 
+            brightness
+        );
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + sway + (Math.random() - 0.5) * 3, y - height);
+        ctx.stroke();
+    }
+    
+    // Add some small rocks
+    ctx.fillStyle = adjustBrightness('#5a5a5a', brightness);
+    for (let i = 0; i < 8; i++) {
+        const x = canvas.width * 0.58 + Math.random() * canvas.width * 0.3;
+        const y = canvas.height * 0.65 + Math.random() * 8;
+        const size = 2 + Math.random() * 3;
+        
+        ctx.beginPath();
+        ctx.ellipse(x, y, size, size * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    ctx.globalAlpha = 1;
+}
+
+function drawDock() {
+    const brightness = gameState.atmosphere.brightness;
+    const baseX = canvas.width * 0.68;
+    const baseY = canvas.height * 0.59;
+    
+    // Dock planks
+    const plankColor = adjustBrightness('#6d5a44', brightness);
+    const darkPlankColor = adjustBrightness('#5a4a35', brightness);
+    
+    // Support posts in water
+    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.fillRect(baseX + 5, baseY + 10, 8, 50);
+    ctx.fillRect(baseX + 80, baseY + 10, 8, 50);
+    
+    // Main dock surface
+    ctx.fillStyle = plankColor;
+    ctx.fillRect(baseX, baseY, 100, 45);
+    
+    // Plank lines
+    ctx.strokeStyle = darkPlankColor;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+        const y = baseY + i * 8;
+        ctx.beginPath();
+        ctx.moveTo(baseX, y);
+        ctx.lineTo(baseX + 100, y);
+        ctx.stroke();
+    }
+    
+    // Vertical supports
+    ctx.strokeStyle = darkPlankColor;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(baseX + 10, baseY);
+    ctx.lineTo(baseX + 10, baseY + 45);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(baseX + 90, baseY);
+    ctx.lineTo(baseX + 90, baseY + 45);
+    ctx.stroke();
+}
+
+function drawThoreau() {
+    const brightness = gameState.atmosphere.brightness;
+    const x = canvas.width * 0.72;
+    const y = canvas.height * 0.52;
+    
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 42, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Legs
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.fillRect(x - 6, y + 20, 5, 20);
+    ctx.fillRect(x + 1, y + 20, 5, 20);
+    
+    // Body
+    ctx.fillStyle = adjustBrightness('#5C4033', brightness);
+    ctx.fillRect(x - 10, y, 20, 25);
+    
+    // Arms
+    ctx.fillStyle = adjustBrightness('#5C4033', brightness);
+    // Right arm (holding rod)
+    ctx.save();
+    ctx.translate(x + 10, y + 8);
+    ctx.rotate(Math.PI / 6);
+    ctx.fillRect(-3, 0, 6, 18);
+    ctx.restore();
+    
+    // Left arm
+    ctx.fillRect(x - 13, y + 5, 6, 15);
+    
+    // Head
+    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
+    ctx.beginPath();
+    ctx.arc(x, y - 8, 11, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Beard
+    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.beginPath();
+    ctx.arc(x, y - 3, 7, 0, Math.PI);
+    ctx.fill();
+    
+    // Hat
+    ctx.fillStyle = adjustBrightness('#2C2416', brightness);
+    // Hat brim
+    ctx.fillRect(x - 15, y - 20, 30, 4);
+    // Hat top
+    ctx.fillRect(x - 10, y - 30, 20, 14);
+    
+    // Fishing rod
+    ctx.strokeStyle = adjustBrightness('#8B7355', brightness);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y + 20);
+    ctx.lineTo(x + 40, y - 25);
+    ctx.stroke();
+    
+    // Rod tip
+    ctx.fillStyle = adjustBrightness('#6d5a44', brightness);
+    ctx.beginPath();
+    ctx.arc(x + 40, y - 25, 3, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawBird(x, y) {
+    ctx.strokeStyle = '#2C3E50';
+    ctx.lineWidth = 2;
+    
+    // Simple bird silhouette
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y);
+    ctx.quadraticCurveTo(x - 4, y - 5, x, y);
+    ctx.quadraticCurveTo(x + 4, y - 5, x + 8, y);
+    ctx.stroke();
+}
+
+function adjustBrightness(color, factor) {
+    // Convert hex to RGB
+    const hex = color.replace('#', '');
+    let r = parseInt(hex.substr(0, 2), 16);
+    let g = parseInt(hex.substr(2, 2), 16);
+    let b = parseInt(hex.substr(4, 2), 16);
+    
+    // Adjust brightness
+    r = Math.min(255, Math.floor(r * factor));
+    g = Math.min(255, Math.floor(g * factor));
+    b = Math.min(255, Math.floor(b * factor));
+    
+    // Convert back to hex
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// Start the game when page loads
+window.addEventListener('load', init);
+
