@@ -125,6 +125,7 @@ const phases = [
     {
         name: "The State",
         speaker: "Sam Staples - The Tax Collector",
+        portrait: "assets/images/portraits/Sam Staples.png",
         text: '"Mr. Thoreau. You haven\'t paid your poll tax in years. The money supports the war in Mexico. If you don\'t pay now, I have to take you to jail."',
         choices: [
             {
@@ -150,6 +151,7 @@ const phases = [
     {
         name: "The Railroad",
         speaker: "Internal Thought",
+        portrait: "assets/images/portraits/internal_thought.png",
         text: 'The Fitchburg Railroad... It cuts through the woods. It represents commerce, speed, and "progress."',
         choices: [
             {
@@ -174,6 +176,7 @@ const phases = [
     {
         name: "The Visitor",
         speaker: "Alex Therien - The Woodchopper",
+        portrait: "assets/images/portraits/alextherien.png",
         text: '"Mr. Thoreau! I\'ve been cutting wood all day. Tell me, what use is all your reading and writing? A man needs work, wages, and a roof over his family. What does philosophy put on the table?"',
         choices: [
             {
@@ -198,6 +201,7 @@ const phases = [
     {
         name: "The Books",
         speaker: "Internal Thought",
+        portrait: "assets/images/portraits/internal_thought.png",
         text: 'My neighbors think I am lazy because I read Homer and study the classics instead of working from dawn to dusk. But what is the harvest of reading compared to the harvest of corn?',
         choices: [
             {
@@ -222,6 +226,7 @@ const phases = [
     {
         name: "The Cost",
         speaker: "A Merchant from Concord",
+        portrait: "assets/images/portraits/merchant.png",
         text: '"Thoreau, I heard your cabin cost only $28 to build. But a proper house costs $800! How can you live with so little? Don\'t you want fine furniture, a barn, livestock? You\'ll never accumulate wealth this way."',
         choices: [
             {
@@ -247,6 +252,7 @@ const phases = [
     {
         name: "The Wild",
         speaker: "Internal Thought",
+        portrait: "assets/images/portraits/internal_thought.png",
         text: 'I have walked four miles today through the woods, observing. Society says I am wasting time. But in wildness is the preservation of the world. Should I abandon these walks for society\'s approval?',
         choices: [
             {
@@ -273,6 +279,7 @@ const phases = [
     {
         name: "The Question",
         speaker: "A Young Student",
+        portrait: "assets/images/portraits/student.png",
         text: '"Mr. Thoreau, why did you leave the woods after two years? Did you fail? My father says you gave up and moved back home. Was your experiment a mistake?"',
         choices: [
             {
