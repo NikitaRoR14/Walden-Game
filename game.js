@@ -99,6 +99,7 @@ const phases = [
     {
         name: "The Mentor",
         speaker: "Ralph Waldo Emerson",
+        portrait: "assets/images/portraits/emerson.png",
         text: '"Henry! The town is talking. They say you are wasting your life here doing nothing but watching the water. Come back to the city. We have a lecture to attend."',
         choices: [
             {
@@ -1042,6 +1043,7 @@ function showDialog(phaseIndex) {
     const speaker = document.getElementById('dialog-speaker');
     const text = document.getElementById('dialog-text');
     const choices = document.getElementById('dialog-choices');
+    const portrait = document.getElementById('dialog-portrait');
     
     // Clear any existing typewriter
     if (typewriterInterval) {
@@ -1053,6 +1055,14 @@ function showDialog(phaseIndex) {
     
     speaker.textContent = phase.speaker;
     text.textContent = '';
+    
+    // Show portrait if available
+    if (phase.portrait) {
+        portrait.src = phase.portrait;
+        portrait.classList.remove('hidden');
+    } else {
+        portrait.classList.add('hidden');
+    }
     
     // Clear previous choices and hide them initially
     choices.innerHTML = '';
