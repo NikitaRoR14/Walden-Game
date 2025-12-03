@@ -348,8 +348,22 @@ let particles = [];
 let fishingLine = null;
 let bobber = null;
 
-// Thoreau clickable area
+// Clickable areas
 const thoreauClickArea = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+};
+
+const emersonClickArea = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+};
+
+const cabinClickArea = {
     x: 0,
     y: 0,
     width: 0,
@@ -552,10 +566,20 @@ function init() {
     canvas.addEventListener('mousemove', handleCanvasHover);
     canvas.style.cursor = 'default';
     
-    // Biography popup close button
+    // Biography popup close buttons
     const closeBioBtn = document.getElementById('close-bio-btn');
     if (closeBioBtn) {
         closeBioBtn.addEventListener('click', closeBiography);
+    }
+    
+    const closeEmersonBioBtn = document.getElementById('close-emerson-bio-btn');
+    if (closeEmersonBioBtn) {
+        closeEmersonBioBtn.addEventListener('click', closeEmersonBiography);
+    }
+    
+    const closeCabinInfoBtn = document.getElementById('close-cabin-info-btn');
+    if (closeCabinInfoBtn) {
+        closeCabinInfoBtn.addEventListener('click', closeCabinInfo);
     }
     
     // Initialize particles
@@ -584,6 +608,25 @@ function handleCanvasClick(e) {
         canvasY >= thoreauClickArea.y && 
         canvasY <= thoreauClickArea.y + thoreauClickArea.height) {
         openBiography();
+        return;
+    }
+    
+    // Check if click is on Emerson
+    if (canvasX >= emersonClickArea.x && 
+        canvasX <= emersonClickArea.x + emersonClickArea.width &&
+        canvasY >= emersonClickArea.y && 
+        canvasY <= emersonClickArea.y + emersonClickArea.height) {
+        openEmersonBiography();
+        return;
+    }
+    
+    // Check if click is on Cabin
+    if (canvasX >= cabinClickArea.x && 
+        canvasX <= cabinClickArea.x + cabinClickArea.width &&
+        canvasY >= cabinClickArea.y && 
+        canvasY <= cabinClickArea.y + cabinClickArea.height) {
+        openCabinInfo();
+        return;
     }
 }
 
@@ -599,11 +642,23 @@ function handleCanvasHover(e) {
     const canvasX = x * scaleX;
     const canvasY = y * scaleY;
     
-    // Check if hovering over Thoreau
-    if (canvasX >= thoreauClickArea.x && 
+    // Check if hovering over any clickable element
+    const overThoreau = canvasX >= thoreauClickArea.x && 
         canvasX <= thoreauClickArea.x + thoreauClickArea.width &&
         canvasY >= thoreauClickArea.y && 
-        canvasY <= thoreauClickArea.y + thoreauClickArea.height) {
+        canvasY <= thoreauClickArea.y + thoreauClickArea.height;
+        
+    const overEmerson = canvasX >= emersonClickArea.x && 
+        canvasX <= emersonClickArea.x + emersonClickArea.width &&
+        canvasY >= emersonClickArea.y && 
+        canvasY <= emersonClickArea.y + emersonClickArea.height;
+        
+    const overCabin = canvasX >= cabinClickArea.x && 
+        canvasX <= cabinClickArea.x + cabinClickArea.width &&
+        canvasY >= cabinClickArea.y && 
+        canvasY <= cabinClickArea.y + cabinClickArea.height;
+    
+    if (overThoreau || overEmerson || overCabin) {
         canvas.style.cursor = 'pointer';
     } else {
         canvas.style.cursor = 'default';
@@ -618,6 +673,26 @@ function openBiography() {
 function closeBiography() {
     soundManager.play('menuClose');
     document.getElementById('biography-popup').classList.add('hidden');
+}
+
+function openEmersonBiography() {
+    soundManager.play('dialogOpen');
+    document.getElementById('emerson-biography-popup').classList.remove('hidden');
+}
+
+function closeEmersonBiography() {
+    soundManager.play('menuClose');
+    document.getElementById('emerson-biography-popup').classList.add('hidden');
+}
+
+function openCabinInfo() {
+    soundManager.play('dialogOpen');
+    document.getElementById('cabin-info-popup').classList.remove('hidden');
+}
+
+function closeCabinInfo() {
+    soundManager.play('menuClose');
+    document.getElementById('cabin-info-popup').classList.add('hidden');
 }
 
 function showMainMenu() {
@@ -1155,8 +1230,36 @@ function handleChoice(phaseIndex, choiceIndex) {
 function showLegacy(legacyName) {
     const notification = document.getElementById('legacy-notification');
     const text = document.getElementById('legacy-text');
+    const icon = document.getElementById('legacy-icon');
+    const description = document.getElementById('legacy-description');
     
+    // Set legacy icon based on type
+    const icons = {
+        'Nature': '🌲',
+        'Civil Disobedience': '⚖️',
+        'Simplicity': '🏠',
+        'Deliberate Living': '🎯',
+        'Self-Education': '📚',
+        'Anti-Consumerism': '🕊️',
+        'Wilderness Preservation': '🦌',
+        'Individual Path': '🛤️'
+    };
+    
+    const descriptions = {
+        'Nature': 'Your connection with nature will inspire future generations',
+        'Civil Disobedience': 'Your resistance will echo through history',
+        'Simplicity': 'Your simple life will teach others what truly matters',
+        'Deliberate Living': 'Your intentional life will guide seekers of meaning',
+        'Self-Education': 'Your self-directed learning will inspire autodidacts',
+        'Anti-Consumerism': 'Your rejection of materialism will free future souls',
+        'Wilderness Preservation': 'Your love of wildness will save ecosystems',
+        'Individual Path': 'Your courage to change will liberate others'
+    };
+    
+    icon.textContent = icons[legacyName] || '✨';
     text.textContent = legacyName;
+    description.textContent = descriptions[legacyName] || 'Your wisdom will endure';
+    
     notification.classList.remove('hidden');
     
     document.getElementById('legacy-count').textContent = gameState.legacies.length;
@@ -1174,7 +1277,7 @@ function showLegacy(legacyName) {
                 showEnding();
             }, 500);
         }
-    }, 2500);
+    }, 3500);
 }
 
 function enableFishing() {
@@ -1322,20 +1425,36 @@ function renderScene() {
     ctx.fill();
     ctx.globalAlpha = 1;
     
+    // Distant mountains/hills
+    drawDistantHills();
+    
     // Distant trees (background)
     drawDistantTrees();
+    
+    // Walden's Cabin
+    drawCabin();
     
     // Trees (mid-ground)
     drawTrees();
     
-    // Water with enhanced gradient and depth
-    const waterGradient = ctx.createLinearGradient(0, canvas.height * 0.65, 0, canvas.height);
-    waterGradient.addColorStop(0, adjustBrightness('#4a7a8a', brightness));
-    waterGradient.addColorStop(0.3, adjustBrightness('#3a6a7a', brightness));
-    waterGradient.addColorStop(0.7, adjustBrightness('#2a5a6a', brightness));
-    waterGradient.addColorStop(1, adjustBrightness('#1a4a5a', brightness));
+    // Pond-like water with radial gradient for depth
+    const centerX = canvas.width * 0.5;
+    const centerY = canvas.height * 0.82;
+    const waterGradient = ctx.createRadialGradient(centerX, centerY, 50, centerX, centerY, canvas.width * 0.8);
+    waterGradient.addColorStop(0, adjustBrightness('#2a4a5a', brightness));
+    waterGradient.addColorStop(0.4, adjustBrightness('#3a5a6a', brightness));
+    waterGradient.addColorStop(0.7, adjustBrightness('#2a4a5a', brightness));
+    waterGradient.addColorStop(1, adjustBrightness('#1a3a4a', brightness));
     ctx.fillStyle = waterGradient;
     ctx.fillRect(0, canvas.height * 0.65, canvas.width, canvas.height * 0.35);
+    
+    // Pond edge/shore reflections
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = adjustBrightness('#4a5a4a', brightness);
+    ctx.beginPath();
+    ctx.ellipse(canvas.width * 0.5, canvas.height * 0.66, canvas.width * 0.45, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
     
     // Water surface shimmer effect
     drawWaterShimmer();
@@ -1380,7 +1499,10 @@ function renderScene() {
     // Dock
     drawDock();
     
-    // Thoreau figure
+    // Emerson figure (on shore)
+    drawEmerson();
+    
+    // Thoreau figure (on dock)
     drawThoreau();
     
     // Fishing line
@@ -1476,44 +1598,182 @@ function drawClouds() {
     ctx.globalAlpha = 1;
 }
 
+function drawDistantHills() {
+    const brightness = gameState.atmosphere.brightness;
+    
+    ctx.globalAlpha = 0.4;
+    
+    // Multiple layers of hills for depth
+    const hillLayers = [
+        { y: 0.50, color: '#4a6a5a', height: 40 },
+        { y: 0.53, color: '#3a5a4a', height: 35 },
+        { y: 0.56, color: '#2a4a3a', height: 30 }
+    ];
+    
+    hillLayers.forEach((layer, index) => {
+        ctx.fillStyle = adjustBrightness(layer.color, brightness * (0.4 + index * 0.1));
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height * layer.y + layer.height);
+        
+        for (let x = 0; x <= canvas.width; x += 40) {
+            const noise = Math.sin((x + index * 100) * 0.008) * layer.height + 
+                         Math.cos((x + index * 50) * 0.015) * (layer.height * 0.6);
+            ctx.lineTo(x, canvas.height * layer.y + noise);
+        }
+        
+        ctx.lineTo(canvas.width, canvas.height * 0.65);
+        ctx.lineTo(0, canvas.height * 0.65);
+        ctx.closePath();
+        ctx.fill();
+    });
+    
+    ctx.globalAlpha = 1;
+}
+
 function drawDistantTrees() {
     const brightness = gameState.atmosphere.brightness;
     
-    // Distant forest silhouette with more variety
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.65;
     
-    // Far mountains/hills
-    ctx.fillStyle = adjustBrightness('#3a5a4a', brightness * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(0, canvas.height * 0.58);
-    for (let i = 0; i <= canvas.width; i += 50) {
-        const noise = Math.sin(i * 0.01) * 20 + Math.cos(i * 0.02) * 15;
-        ctx.lineTo(i, canvas.height * 0.55 + noise);
-    }
-    ctx.lineTo(canvas.width, canvas.height * 0.65);
-    ctx.lineTo(0, canvas.height * 0.65);
-    ctx.closePath();
-    ctx.fill();
+    // Dense distant forest
+    ctx.fillStyle = adjustBrightness('#2a4a3a', brightness * 0.65);
     
-    ctx.globalAlpha = 0.6;
-    
-    // Distant forest
-    ctx.fillStyle = adjustBrightness('#2a4a3a', brightness * 0.6);
-    
-    for (let i = 0; i < 20; i++) {
-        const x = (i * canvas.width / 19) - 20;
-        const y = canvas.height * 0.53;
-        const height = 70 + (Math.sin(i) * 20) + (i % 3) * 25;
+    for (let i = 0; i < 30; i++) {
+        const x = (i * canvas.width / 29) - 20;
+        const y = canvas.height * 0.54;
+        const height = 60 + (Math.sin(i * 0.5) * 15) + (i % 4) * 20;
+        const width = 8 + (i % 3) * 4;
         
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x - 12, y + height);
-        ctx.lineTo(x + 12, y + height);
+        ctx.lineTo(x - width, y + height);
+        ctx.lineTo(x + width, y + height);
         ctx.closePath();
         ctx.fill();
     }
     
     ctx.globalAlpha = 1;
+}
+
+function drawCabin() {
+    const brightness = gameState.atmosphere.brightness;
+    const cabinX = canvas.width * 0.15;
+    const cabinY = canvas.height * 0.48;
+    const cabinWidth = 80;
+    const cabinHeight = 50;
+    
+    // Update clickable area
+    cabinClickArea.x = cabinX - 5;
+    cabinClickArea.y = cabinY - 10;
+    cabinClickArea.width = cabinWidth + 10;
+    cabinClickArea.height = cabinHeight + 15;
+    
+    // Cabin shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillRect(cabinX + 3, cabinY + cabinHeight - 2, cabinWidth, 8);
+    
+    // Cabin walls (log cabin)
+    ctx.fillStyle = adjustBrightness('#6d5a44', brightness);
+    ctx.fillRect(cabinX, cabinY, cabinWidth, cabinHeight);
+    
+    // Log lines (horizontal)
+    ctx.strokeStyle = adjustBrightness('#5a4a35', brightness);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+        const y = cabinY + i * (cabinHeight / 6);
+        ctx.beginPath();
+        ctx.moveTo(cabinX, y);
+        ctx.lineTo(cabinX + cabinWidth, y);
+        ctx.stroke();
+    }
+    
+    // Roof
+    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.beginPath();
+    ctx.moveTo(cabinX - 10, cabinY);
+    ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 25);
+    ctx.lineTo(cabinX + cabinWidth + 10, cabinY);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Roof shingles
+    ctx.strokeStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cabinX - 8 + i * 22, cabinY - i * 6);
+        ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 25 + i * 6);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(cabinX + cabinWidth + 8 - i * 22, cabinY - i * 6);
+        ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 25 + i * 6);
+        ctx.stroke();
+    }
+    
+    // Door
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.fillRect(cabinX + 10, cabinY + 15, 18, 35);
+    
+    // Door handle
+    ctx.fillStyle = adjustBrightness('#8B7355', brightness);
+    ctx.beginPath();
+    ctx.arc(cabinX + 24, cabinY + 32, 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Window
+    ctx.fillStyle = adjustBrightness('#5a7a8a', brightness * 1.2);
+    ctx.fillRect(cabinX + 45, cabinY + 20, 20, 15);
+    
+    // Window panes
+    ctx.strokeStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cabinX + 55, cabinY + 20);
+    ctx.lineTo(cabinX + 55, cabinY + 35);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cabinX + 45, cabinY + 27.5);
+    ctx.lineTo(cabinX + 65, cabinY + 27.5);
+    ctx.stroke();
+    
+    // Window reflection
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fillRect(cabinX + 47, cabinY + 22, 6, 4);
+    
+    // Chimney
+    ctx.fillStyle = adjustBrightness('#5a4a35', brightness);
+    ctx.fillRect(cabinX + cabinWidth - 15, cabinY - 15, 12, 20);
+    
+    // Chimney top
+    ctx.fillRect(cabinX + cabinWidth - 17, cabinY - 16, 16, 3);
+    
+    // Smoke
+    if (gameState.atmosphere.soundEnabled) {
+        const time = Date.now() / 1000;
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = adjustBrightness('#888888', brightness);
+        for (let i = 0; i < 3; i++) {
+            const smokeY = cabinY - 18 - i * 8 + Math.sin(time + i) * 2;
+            const smokeX = cabinX + cabinWidth - 9 + Math.sin(time * 2 + i) * 3;
+            ctx.beginPath();
+            ctx.arc(smokeX, smokeY, 4 + i, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+    
+    // Highlight if hoverable
+    if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
+        const time = Date.now() / 1000;
+        ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.05;
+        ctx.strokeStyle = '#e8dcc4';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(cabinClickArea.x, cabinClickArea.y, cabinClickArea.width, cabinClickArea.height);
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+    }
 }
 
 function drawWaterShimmer() {
@@ -1795,6 +2055,110 @@ function drawDock() {
     ctx.moveTo(baseX + 90, baseY);
     ctx.lineTo(baseX + 90, baseY + 45);
     ctx.stroke();
+}
+
+function drawEmerson() {
+    const brightness = gameState.atmosphere.brightness;
+    const x = canvas.width * 0.25;
+    const y = canvas.height * 0.565;
+    const time = Date.now() / 1000;
+    
+    // Update clickable area
+    emersonClickArea.x = x - 18;
+    emersonClickArea.y = y - 30;
+    emersonClickArea.width = 36;
+    emersonClickArea.height = 65;
+    
+    // Shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Legs
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.fillRect(x - 5, y + 18, 4, 18);
+    ctx.fillRect(x + 1, y + 18, 4, 18);
+    
+    // Body (formal coat)
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.fillRect(x - 9, y, 18, 22);
+    
+    // Coat tails
+    ctx.beginPath();
+    ctx.moveTo(x - 9, y + 18);
+    ctx.lineTo(x - 12, y + 26);
+    ctx.lineTo(x - 6, y + 22);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.moveTo(x + 9, y + 18);
+    ctx.lineTo(x + 12, y + 26);
+    ctx.lineTo(x + 6, y + 22);
+    ctx.closePath();
+    ctx.fill();
+    
+    // White shirt
+    ctx.fillStyle = adjustBrightness('#f5f0e8', brightness);
+    ctx.fillRect(x - 5, y + 2, 10, 8);
+    
+    // Arms
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.fillRect(x - 11, y + 4, 4, 14);
+    ctx.fillRect(x + 7, y + 4, 4, 14);
+    
+    // Neck
+    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
+    ctx.fillRect(x - 3, y - 2, 6, 4);
+    
+    // Head
+    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
+    ctx.beginPath();
+    ctx.arc(x, y - 6, 9, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hair (fuller, dignified)
+    ctx.fillStyle = adjustBrightness('#5a4a3a', brightness);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 12, 9, 5, 0, 0, Math.PI);
+    ctx.fill();
+    
+    // Eyes
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.fillRect(x - 3, y - 8, 2, 2);
+    ctx.fillRect(x + 1, y - 8, 2, 2);
+    
+    // Top hat
+    ctx.fillStyle = adjustBrightness('#1a0a0a', brightness);
+    // Hat brim
+    ctx.fillRect(x - 12, y - 16, 24, 3);
+    // Hat crown (tall)
+    ctx.fillRect(x - 8, y - 28, 16, 15);
+    
+    // Cane
+    ctx.strokeStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 11, y + 6);
+    ctx.lineTo(x + 11, y + 20);
+    ctx.stroke();
+    
+    // Cane handle
+    ctx.beginPath();
+    ctx.arc(x + 11, y + 4, 2.5, Math.PI, 0);
+    ctx.stroke();
+    
+    // Highlight if hoverable
+    if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
+        ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.05;
+        ctx.strokeStyle = '#e8dcc4';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(emersonClickArea.x, emersonClickArea.y, emersonClickArea.width, emersonClickArea.height);
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+    }
 }
 
 function drawThoreau() {

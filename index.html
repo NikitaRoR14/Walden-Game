@@ -91,8 +91,11 @@
 
                 <div id="legacy-notification" class="legacy-notification hidden">
                     <div class="legacy-content">
+                        <div id="legacy-icon" class="legacy-icon"></div>
                         <h3>Legacy Unlocked</h3>
-                        <p id="legacy-text"></p>
+                        <p id="legacy-text" class="legacy-title"></p>
+                        <p id="legacy-description" class="legacy-desc"></p>
+                        <div class="legacy-ornament"></div>
                     </div>
                 </div>
 
@@ -138,6 +141,119 @@
                         </div>
                         
                         <button id="close-settings-btn" class="main-button">Back</button>
+                    </div>
+                </div>
+
+                <div id="emerson-biography-popup" class="biography-popup hidden">
+                    <div class="biography-content">
+                        <button id="close-emerson-bio-btn" class="close-bio-btn">&times;</button>
+                        
+                        <div class="bio-header">
+                            <img src="assets/images/portraits/emerson.png" alt="Ralph Waldo Emerson" class="bio-portrait">
+                            <div class="bio-title">
+                                <h2>Ralph Waldo Emerson</h2>
+                                <p class="bio-dates">1803 - 1882</p>
+                                <p class="bio-subtitle">"To be yourself in a world that is constantly trying to make you something else is the greatest accomplishment"</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bio-scroll">
+                            <section class="bio-section">
+                                <h3>The Sage of Concord</h3>
+                                <p>Ralph Waldo Emerson was America's greatest philosopher, essayist, and poet of the 19th century. He founded the Transcendentalist movement, which emphasized the inherent goodness of people and nature, and the corruption of society and institutions.</p>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>Thoreau's Mentor</h3>
+                                <p>Emerson was Thoreau's mentor, friend, and benefactor. He owned the land where Thoreau built his cabin at Walden Pond and encouraged his experiment. Though they sometimes disagreed on philosophy and methods, their friendship shaped American literature and thought.</p>
+                                <p>Emerson famously said of Thoreau after his death: "The country knows not yet, or in the least part, how great a son it has lost."</p>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>Major Works</h3>
+                                <ul>
+                                    <li><strong>Nature (1836)</strong> - Founding document of Transcendentalism</li>
+                                    <li><strong>Self-Reliance (1841)</strong> - His most famous essay on individualism</li>
+                                    <li><strong>The American Scholar (1837)</strong> - Called "America's intellectual Declaration of Independence"</li>
+                                    <li><strong>Essays: First & Second Series</strong> - Including "Experience," "Circles," "The Poet"</li>
+                                </ul>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>Philosophy</h3>
+                                <p>Emerson believed in the divinity of nature, the power of individual intuition over tradition, and the importance of self-reliance. He taught that every individual contains divine spark and should trust their inner voice over societal convention.</p>
+                                <p>His ideas influenced not just Thoreau, but Walt Whitman, Emily Dickinson, and countless others who sought to live authentic, examined lives.</p>
+                            </section>
+                            
+                            <section class="bio-section bio-quote">
+                                <blockquote>
+                                    "What lies behind us and what lies before us are tiny matters compared to what lies within us."
+                                </blockquote>
+                                <cite>— Ralph Waldo Emerson</cite>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cabin-info-popup" class="biography-popup hidden">
+                    <div class="biography-content">
+                        <button id="close-cabin-info-btn" class="close-bio-btn">&times;</button>
+                        
+                        <div class="bio-header">
+                            <div class="cabin-icon">🏠</div>
+                            <div class="bio-title">
+                                <h2>Thoreau's Cabin at Walden</h2>
+                                <p class="bio-dates">Built 1845</p>
+                                <p class="bio-subtitle">"I went to the woods because I wished to live deliberately"</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bio-scroll">
+                            <section class="bio-section">
+                                <h3>The Experiment</h3>
+                                <p>On July 4, 1845, Henry David Thoreau moved into a small cabin he had built near Walden Pond in Concord, Massachusetts. He lived there for two years, two months, and two days, seeking to "live deliberately" and discover the essential facts of life.</p>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>By the Numbers</h3>
+                                <ul>
+                                    <li><strong>Cost to Build:</strong> $28.12½ (about $1,000 today)</li>
+                                    <li><strong>Size:</strong> 10 feet by 15 feet (150 square feet)</li>
+                                    <li><strong>Features:</strong> One room, fireplace, bed, table, desk, three chairs</li>
+                                    <li><strong>Distance to Town:</strong> 1.5 miles from Concord center</li>
+                                    <li><strong>Land:</strong> Owned by Ralph Waldo Emerson</li>
+                                </ul>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>Daily Life</h3>
+                                <p>Thoreau's days began before dawn. He bathed in the pond, watched the sunrise, and spent mornings writing in his journal. He worked in his bean field for income, walked four hours daily observing nature, read classics by candlelight, and received occasional visitors.</p>
+                                <p>Contrary to myth, he wasn't a hermit—he walked to town frequently, dined with family and friends, and welcomed visitors to his cabin.</p>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>The Three Chairs</h3>
+                                <p>Thoreau wrote: "I had three chairs in my house; one for solitude, two for friendship, three for society." This simple statement captured his philosophy of balance between being alone, intimate connection, and community.</p>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>Why He Left</h3>
+                                <p>Thoreau left Walden on September 6, 1847, not because he failed, but because he succeeded. He wrote: "I left the woods for as good a reason as I went there. Perhaps it seemed to me that I had several more lives to live, and could not spare any more time for that one."</p>
+                                <p>His experiment proved that one could live richly on very little, that simplicity brought clarity, and that deliberate living was possible in a rapidly industrializing America.</p>
+                            </section>
+                            
+                            <section class="bio-section">
+                                <h3>Legacy</h3>
+                                <p>The original cabin no longer exists (Thoreau dismantled it in 1849), but a replica stands near the pond today. The site is a pilgrimage destination for readers of Walden, seekers of simplicity, and those questioning modern life's assumptions.</p>
+                            </section>
+                            
+                            <section class="bio-section bio-quote">
+                                <blockquote>
+                                    "I learned this, at least, by my experiment: that if one advances confidently in the direction of his dreams, and endeavors to live the life which he has imagined, he will meet with a success unexpected in common hours."
+                                </blockquote>
+                                <cite>— Henry David Thoreau, Walden</cite>
+                            </section>
+                        </div>
                     </div>
                 </div>
 
