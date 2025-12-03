@@ -1841,33 +1841,20 @@ function drawThoreau() {
     ctx.arc(x, y - 8, 12, 0, Math.PI * 2);
     ctx.fill();
     
-    // Ear
-    ctx.fillStyle = adjustBrightness('#c49564', brightness);
-    ctx.beginPath();
-    ctx.arc(x - 10, y - 8, 3, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Hair
+    // Hair (simplified)
     ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
     ctx.beginPath();
-    ctx.ellipse(x - 5, y - 15, 8, 6, -0.2, 0, Math.PI);
+    ctx.ellipse(x, y - 15, 10, 5, 0, 0, Math.PI);
     ctx.fill();
     
-    // Beard (fuller, more detailed)
-    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
-    ctx.beginPath();
-    ctx.arc(x - 2, y - 1, 8, 0, Math.PI);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + 2, y - 1, 7, 0, Math.PI);
-    ctx.fill();
-    
-    // Mustache
+    // Beard (cleaner, single shape)
     ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.fillRect(x - 6, y - 6, 5, 2);
-    ctx.fillRect(x + 1, y - 6, 5, 2);
+    ctx.beginPath();
+    ctx.arc(x, y - 2, 9, 0.3, Math.PI - 0.3);
+    ctx.lineTo(x, y + 2);
+    ctx.fill();
     
-    // Eyes
+    // Eyes (simple dots)
     ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
     ctx.beginPath();
     ctx.arc(x - 4, y - 10, 1.5, 0, Math.PI * 2);
@@ -1876,22 +1863,11 @@ function drawThoreau() {
     ctx.arc(x + 4, y - 10, 1.5, 0, Math.PI * 2);
     ctx.fill();
     
-    // Eye glint
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    // Subtle nose
+    ctx.fillStyle = adjustBrightness('#c49564', brightness);
     ctx.beginPath();
-    ctx.arc(x - 3, y - 11, 0.5, 0, Math.PI * 2);
+    ctx.arc(x, y - 7, 2, 0, Math.PI);
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + 5, y - 11, 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Nose
-    ctx.strokeStyle = adjustBrightness('#b48554', brightness);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 10);
-    ctx.lineTo(x + 2, y - 6);
-    ctx.stroke();
     
     // Hat
     ctx.fillStyle = adjustBrightness('#2C2416', brightness);
