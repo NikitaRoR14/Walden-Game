@@ -1835,39 +1835,22 @@ function drawThoreau() {
     ctx.fillStyle = adjustBrightness('#d4a574', brightness);
     ctx.fillRect(x - 4, y - 2, 8, 4);
     
-    // Head
+    // Head - clean circle
     ctx.fillStyle = adjustBrightness('#d4a574', brightness);
     ctx.beginPath();
-    ctx.arc(x, y - 8, 12, 0, Math.PI * 2);
+    ctx.arc(x, y - 8, 11, 0, Math.PI * 2);
     ctx.fill();
     
-    // Hair (simplified)
-    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    // Simple beard - just a half circle at bottom
+    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
     ctx.beginPath();
-    ctx.ellipse(x, y - 15, 10, 5, 0, 0, Math.PI);
+    ctx.arc(x, y - 3, 7, 0, Math.PI);
     ctx.fill();
     
-    // Beard (cleaner, single shape)
-    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.beginPath();
-    ctx.arc(x, y - 2, 9, 0.3, Math.PI - 0.3);
-    ctx.lineTo(x, y + 2);
-    ctx.fill();
-    
-    // Eyes (simple dots)
+    // Two simple eyes
     ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
-    ctx.beginPath();
-    ctx.arc(x - 4, y - 10, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x + 4, y - 10, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Subtle nose
-    ctx.fillStyle = adjustBrightness('#c49564', brightness);
-    ctx.beginPath();
-    ctx.arc(x, y - 7, 2, 0, Math.PI);
-    ctx.fill();
+    ctx.fillRect(x - 4, y - 10, 2, 2);
+    ctx.fillRect(x + 2, y - 10, 2, 2);
     
     // Hat
     ctx.fillStyle = adjustBrightness('#2C2416', brightness);
