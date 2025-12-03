@@ -348,6 +348,11 @@ let particles = [];
 let fishingLine = null;
 let bobber = null;
 
+// Mobile detection
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                 ('ontouchstart' in window) || 
+                 (navigator.maxTouchPoints > 0);
+
 // Clickable areas
 const thoreauClickArea = {
     x: 0,
@@ -561,10 +566,23 @@ function init() {
     // Keyboard controls
     document.addEventListener('keydown', handleKeyPress);
     
-    // Canvas click handler for Thoreau
+    // Canvas click/touch handlers
     canvas.addEventListener('click', handleCanvasClick);
+    canvas.addEventListener('touchstart', handleCanvasTouchStart, { passive: false });
     canvas.addEventListener('mousemove', handleCanvasHover);
     canvas.style.cursor = 'default';
+    
+    // Add mobile-specific class to body if on mobile
+    if (isMobile) {
+        document.body.classList.add('mobile');
+        
+        // Prevent pull-to-refresh on mobile
+        document.body.addEventListener('touchmove', function(e) {
+            if (e.target === canvas) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
     
     // Biography popup close buttons
     const closeBioBtn = document.getElementById('close-bio-btn');
@@ -854,6 +872,53 @@ function handleKeyPress(e) {
     }
 }
 
+function handleCanvasTouchStart(e) {
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    // Scale coordinates to canvas size
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = x * scaleX;
+    const canvasY = y * scaleY;
+    
+    // Check clickable areas (same as mouse click)
+    if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
+        if (canvasX >= thoreauClickArea.x && 
+            canvasX <= thoreauClickArea.x + thoreauClickArea.width &&
+            canvasY >= thoreauClickArea.y && 
+            canvasY <= thoreauClickArea.y + thoreauClickArea.height) {
+            openBiography();
+            return;
+        }
+        
+        if (canvasX >= emersonClickArea.x && 
+            canvasX <= emersonClickArea.x + emersonClickArea.width &&
+            canvasY >= emersonClickArea.y && 
+            canvasY <= emersonClickArea.y + emersonClickArea.height) {
+            openEmersonBiography();
+            return;
+        }
+        
+        if (canvasX >= cabinClickArea.x && 
+            canvasX <= cabinClickArea.x + cabinClickArea.width &&
+            canvasY >= cabinClickArea.y && 
+            canvasY <= cabinClickArea.y + cabinClickArea.height) {
+            openCabinInfo();
+            return;
+        }
+        
+        // If not clicking any character, treat as fishing cast or minigame control
+        if (gameState.canFish && !gameState.isFishing) {
+            startFishing();
+        }
+    }
+}
+
 function toggleEscapeMenu() {
     const escapeMenu = document.getElementById('escape-menu');
     
@@ -912,14 +977,14 @@ document.addEventListener('mouseup', (e) => {
 });
 
 document.addEventListener('touchstart', (e) => {
-    if (gameState.fishingMinigame.active) {
+    if (gameState.fishingMinigame.active && !e.target.closest('.close-bio-btn')) {
         isHoldingBar = true;
     }
-});
+}, { passive: true });
 
 document.addEventListener('touchend', (e) => {
     isHoldingBar = false;
-});
+}, { passive: true });
 
 function startFishing() {
     if (!gameState.canFish) return;
