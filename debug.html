@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug - Walden Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #2a2a2a;
+            color: #fff;
+        }
+        .test { margin: 10px 0; padding: 10px; background: #1a1a1a; }
+        .pass { border-left: 4px solid #0f0; }
+        .fail { border-left: 4px solid #f00; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug Page</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        function test(name, fn) {
+            const div = document.createElement('div');
+            div.className = 'test';
+            try {
+                const result = fn();
+                div.classList.add(result ? 'pass' : 'fail');
+                div.innerHTML = `<strong>${result ? '✓' : '✗'} ${name}</strong>`;
+                results.appendChild(div);
+                return result;
+            } catch (e) {
+                div.classList.add('fail');
+                div.innerHTML = `<strong>✗ ${name}</strong><br><pre>${e.message}</pre>`;
+                results.appendChild(div);
+                return false;
+            }
+        }
+        
+        // Wait for page load
+        window.addEventListener('load', () => {
+            test('Page loaded', () => true);
+            test('Main menu exists', () => !!document.getElementById('main-menu'));
+            test('Game canvas exists', () => !!document.getElementById('game-canvas'));
+            test('Story mode button exists', () => !!document.getElementById('story-mode-btn'));
+            test('CSS loaded', () => {
+                const body = getComputedStyle(document.body);
+                return body.backgroundColor !== 'rgba(0, 0, 0, 0)';
+            });
+            
+            // Check main menu visibility
+            const mainMenu = document.getElementById('main-menu');
+            if (mainMenu) {
+                const style = getComputedStyle(mainMenu);
+                const info = document.createElement('div');
+                info.className = 'test pass';
+                info.innerHTML = `
+                    <strong>Main Menu Computed Styles:</strong><br>
+                    Display: ${style.display}<br>
+                    Visibility: ${style.visibility}<br>
+                    Opacity: ${style.opacity}<br>
+                    Position: ${style.position}<br>
+                    Z-index: ${style.zIndex}<br>
+                    Has 'hidden' class: ${mainMenu.classList.contains('hidden')}
+                `;
+                results.appendChild(info);
+            }
+            
+            // Try to load main.js
+            setTimeout(async () => {
+                try {
+                    await import('./src/main.js');
+                    test('main.js loaded', () => true);
+                } catch (e) {
+                    test('main.js loaded', () => {
+                        throw new Error(e.message);
+                    });
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>
+

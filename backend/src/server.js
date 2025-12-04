@@ -6,7 +6,16 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { body, validationResult } = require('express-validator');
 const { submitScore, getTopScores, getPlayerRank, getStats } = require('./database');
+const { 
+    registerUser, 
+    loginUser, 
+    getUserById, 
+    emailExists, 
+    nicknameExists,
+    authenticateToken 
+} = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -155,6 +164,142 @@ app.get('/api/leaderboard/stats', async (req, res) => {
     } catch (error) {
         console.error('Error fetching stats:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
+/**
+ * Register a new user
+ * POST /api/auth/register
+ */
+app.post('/api/auth/register', [
+    body('email').isEmail().normalizeEmail(),
+    body('password').isLength({ min: 6 }),
+    body('nickname').isLength({ min: 3, max: 20 }).trim(),
+    body('avatar').isIn(['thoreau', 'emerson', 'woodchopper', 'merchant', 'student', 'nature', 'book', 'cabin'])
+], async (req, res) => {
+    try {
+        // Validation
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { email, password, nickname, avatar } = req.body;
+
+        // Check if email or nickname already exists
+        if (await emailExists(email)) {
+            return res.status(400).json({ error: 'Email already registered' });
+        }
+
+        if (await nicknameExists(nickname)) {
+            return res.status(400).json({ error: 'Nickname already taken' });
+        }
+
+        // Register user
+        const user = await registerUser(email, password, nickname, avatar);
+
+        res.status(201).json({
+            success: true,
+            message: 'User registered successfully',
+            user: {
+                id: user.id,
+                email: user.email,
+                nickname: user.nickname,
+                avatar: user.avatar
+            }
+        });
+
+    } catch (error) {
+        console.error('Error registering user:', error);
+        res.status(500).json({ error: error.message || 'Failed to register user' });
+    }
+});
+
+/**
+ * Login user
+ * POST /api/auth/login
+ */
+app.post('/api/auth/login', [
+    body('email').isEmail().normalizeEmail(),
+    body('password').notEmpty()
+], async (req, res) => {
+    try {
+        // Validation
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        const { email, password } = req.body;
+
+        // Login
+        const result = await loginUser(email, password);
+
+        res.json({
+            success: true,
+            token: result.token,
+            user: result.user
+        });
+
+    } catch (error) {
+        console.error('Error logging in:', error);
+        res.status(401).json({ error: error.message || 'Invalid credentials' });
+    }
+});
+
+/**
+ * Get current user profile
+ * GET /api/auth/me
+ */
+app.get('/api/auth/me', authenticateToken, (req, res) => {
+    try {
+        const user = getUserById(req.user.id);
+        
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                nickname: user.nickname,
+                avatar: user.avatar,
+                createdAt: user.created_at,
+                lastLogin: user.last_login
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching user:', error);
+        res.status(500).json({ error: 'Failed to fetch user' });
+    }
+});
+
+/**
+ * Check if email is available
+ * GET /api/auth/check-email/:email
+ */
+app.get('/api/auth/check-email/:email', async (req, res) => {
+    try {
+        const exists = await emailExists(req.params.email);
+        res.json({ available: !exists });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to check email' });
+    }
+});
+
+/**
+ * Check if nickname is available
+ * GET /api/auth/check-nickname/:nickname
+ */
+app.get('/api/auth/check-nickname/:nickname', async (req, res) => {
+    try {
+        const exists = await nicknameExists(req.params.nickname);
+        res.json({ available: !exists });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to check nickname' });
     }
 });
 

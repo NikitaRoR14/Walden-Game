@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test - Walden Game</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+        pre { background: #000; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Walden Game Module Test</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        const results = document.getElementById('results');
+        
+        function log(msg, isError = false) {
+            const div = document.createElement('div');
+            div.className = isError ? 'error' : 'success';
+            div.textContent = msg;
+            results.appendChild(div);
+        }
+        
+        log('✓ HTML loaded');
+        log('✓ ES6 modules supported');
+        
+        try {
+            const { gameState } = await import('./src/core/state.js');
+            log('✓ state.js loaded');
+            log('  Game mode: ' + gameState.mode);
+        } catch (e) {
+            log('✗ Failed to load state.js: ' + e.message, true);
+            console.error(e);
+        }
+        
+        try {
+            const { fishSpecies } = await import('./src/core/constants.js');
+            log('✓ constants.js loaded');
+            log('  Fish species: ' + fishSpecies.length);
+        } catch (e) {
+            log('✗ Failed to load constants.js: ' + e.message, true);
+            console.error(e);
+        }
+        
+        try {
+            const { soundManager } = await import('./src/systems/sound.js');
+            log('✓ sound.js loaded');
+        } catch (e) {
+            log('✗ Failed to load sound.js: ' + e.message, true);
+            console.error(e);
+        }
+        
+        try {
+            await import('./src/main.js');
+            log('✓ main.js loaded and initialized');
+            
+            setTimeout(() => {
+                const canvas = document.getElementById('game-canvas');
+                if (canvas) {
+                    log('✓ Canvas found: ' + canvas.width + 'x' + canvas.height);
+                } else {
+                    log('✗ Canvas not found in DOM', true);
+                }
+                
+                const mainMenu = document.getElementById('main-menu');
+                if (mainMenu) {
+                    log('✓ Main menu found');
+                    log('  Is hidden: ' + mainMenu.classList.contains('hidden'));
+                } else {
+                    log('✗ Main menu not found', true);
+                }
+            }, 1000);
+        } catch (e) {
+            log('✗ Failed to load main.js: ' + e.message, true);
+            console.error(e);
+        }
+    </script>
+</body>
+</html>
+

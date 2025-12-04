@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter Walden - Authentication</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+    <!-- Animated background -->
+    <canvas id="auth-canvas"></canvas>
+    
+    <div class="auth-container">
+        <!-- Login Form -->
+        <div id="login-form" class="auth-card active">
+            <div class="card-header">
+                <h1>🌲 Return to Walden</h1>
+                <p class="subtitle">Welcome back, seeker of simplicity</p>
+            </div>
+
+            <form id="login-form-element" class="auth-form">
+                <div class="form-group">
+                    <label for="login-email">📧 Email</label>
+                    <input type="email" id="login-email" name="email" required 
+                           placeholder="your@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="login-password">🔒 Password</label>
+                    <input type="password" id="login-password" name="password" required
+                           placeholder="Enter your password">
+                </div>
+
+                <button type="submit" class="auth-button">
+                    <span>Enter the Woods</span>
+                </button>
+
+                <div class="form-footer">
+                    <p>New to Walden? 
+                        <a href="#" onclick="switchToSignup(); return false;">
+                            Create an account
+                        </a>
+                    </p>
+                </div>
+            </form>
+        </div>
+
+        <!-- Signup Form -->
+        <div id="signup-form" class="auth-card">
+            <div class="card-header">
+                <h1>🏕️ Journey to Walden</h1>
+                <p class="subtitle">"I went to the woods because I wished to live deliberately"</p>
+            </div>
+
+            <form id="signup-form-element" class="auth-form">
+                <div class="form-group">
+                    <label for="signup-email">📧 Email</label>
+                    <input type="email" id="signup-email" name="email" required
+                           placeholder="your@email.com">
+                    <span class="validation-msg" id="email-validation"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="signup-nickname">✏️ Nickname</label>
+                    <input type="text" id="signup-nickname" name="nickname" required
+                           placeholder="Choose a name (3-20 characters)"
+                           minlength="3" maxlength="20">
+                    <span class="validation-msg" id="nickname-validation"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="signup-password">🔒 Password</label>
+                    <input type="password" id="signup-password" name="password" required
+                           placeholder="At least 6 characters"
+                           minlength="6">
+                    <span class="validation-msg" id="password-validation"></span>
+                </div>
+
+                <div class="form-group">
+                    <label>🎭 Choose Your Avatar</label>
+                    <div class="avatar-selector">
+                        <div class="avatar-option" data-avatar="thoreau">
+                            <div class="avatar-icon">🧔</div>
+                            <span>Thoreau</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="emerson">
+                            <div class="avatar-icon">🎩</div>
+                            <span>Emerson</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="woodchopper">
+                            <div class="avatar-icon">🪓</div>
+                            <span>Woodchopper</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="merchant">
+                            <div class="avatar-icon">💼</div>
+                            <span>Merchant</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="student">
+                            <div class="avatar-icon">📚</div>
+                            <span>Student</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="nature">
+                            <div class="avatar-icon">🌿</div>
+                            <span>Nature</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="book">
+                            <div class="avatar-icon">📖</div>
+                            <span>Scholar</span>
+                        </div>
+                        <div class="avatar-option" data-avatar="cabin">
+                            <div class="avatar-icon">🏠</div>
+                            <span>Cabin</span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="selected-avatar" name="avatar" required>
+                    <span class="validation-msg" id="avatar-validation"></span>
+                </div>
+
+                <button type="submit" class="auth-button">
+                    <span>Begin Your Journey</span>
+                </button>
+
+                <div class="form-footer">
+                    <p>Already have an account? 
+                        <a href="#" onclick="switchToLogin(); return false;">
+                            Sign in
+                        </a>
+                    </p>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading overlay -->
+        <div id="loading-overlay" class="loading-overlay hidden">
+            <div class="spinner"></div>
+            <p>Preparing your journey...</p>
+        </div>
+
+        <!-- Error message -->
+        <div id="error-message" class="error-message hidden"></div>
+
+        <!-- Success message -->
+        <div id="success-message" class="success-message hidden"></div>
+    </div>
+
+    <!-- Thoreau quote footer -->
+    <div class="quote-footer">
+        <p>"Simplicity, simplicity, simplicity! I say, let your affairs be as two or three, and not a hundred or a thousand."</p>
+        <span>— Henry David Thoreau, Walden</span>
+    </div>
+
+    <script src="auth.js"></script>
+</body>
+</html>
+

@@ -1,9 +1,27 @@
 /**
  * API Client for Walden Game Backend
- * Handles communication with the leaderboard server
+ * Handles communication with the leaderboard server and authentication
  */
 
 const API_BASE_URL = 'http://localhost:3000/api';
+
+/**
+ * Get authentication token from localStorage
+ */
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
+/**
+ * Get authenticated headers
+ */
+function getAuthHeaders() {
+    const token = getAuthToken();
+    return {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
+    };
+}
 
 /**
  * Submit score to leaderboard
@@ -92,6 +110,49 @@ async function getLeaderboardStats() {
 async function checkHealth() {
     try {
         const response = await fetch(`${API_BASE_URL}/health`);
+        return response.ok;
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * Get current user data
+ */
+function getCurrentUser() {
+    const userDataString = localStorage.getItem('userData');
+    return userDataString ? JSON.parse(userDataString) : null;
+}
+
+/**
+ * Check if user is authenticated
+ */
+function isAuthenticated() {
+    return !!getAuthToken();
+}
+
+/**
+ * Logout user
+ */
+function logout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
+    window.location.href = 'auth.html';
+}
+
+/**
+ * Verify current token
+ */
+async function verifyAuth() {
+    const token = getAuthToken();
+    if (!token) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: getAuthHeaders()
+        });
         return response.ok;
     } catch (error) {
         return false;
