@@ -159,3 +159,106 @@ async function verifyAuth() {
     }
 }
 
+/**
+ * Record a caught fish
+ */
+async function recordFish(fishId, fishName) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/progress/fish`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ fishId, fishName })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error recording fish:', error);
+        return null;
+    }
+}
+
+/**
+ * Record a legacy unlocked
+ */
+async function recordLegacy(legacyName) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/progress/legacy`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ legacyName })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error recording legacy:', error);
+        return null;
+    }
+}
+
+/**
+ * Mark story as completed
+ */
+async function completeStory() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/progress/complete-story`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error completing story:', error);
+        return null;
+    }
+}
+
+/**
+ * Get user's game progress
+ */
+async function getUserProgress() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/progress`, {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching progress:', error);
+        return null;
+    }
+}
+
+/**
+ * Get progress leaderboard
+ */
+async function getProgressLeaderboard() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/progress/leaderboard`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching progress leaderboard:', error);
+        return null;
+    }
+}
+

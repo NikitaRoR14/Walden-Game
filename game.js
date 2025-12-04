@@ -1141,6 +1141,11 @@ function catchFish() {
             gameState.collection.caught.add(fish.id);
         }
         
+        // Sync fish catch to backend
+        if (typeof window.onFishCaught === 'function') {
+            window.onFishCaught(fish.id, fish.name);
+        }
+        
         showFishCaughtNotification(fish, isNew);
         
         // Reset for next fish
@@ -1280,6 +1285,12 @@ function handleChoice(phaseIndex, choiceIndex) {
     // Show legacy if earned
     if (choice.legacy) {
         gameState.legacies.push(choice.legacy);
+        
+        // Sync legacy to backend
+        if (typeof window.onLegacyUnlocked === 'function') {
+            window.onLegacyUnlocked(choice.legacy);
+        }
+        
         setTimeout(() => {
             showLegacy(choice.legacy);
         }, 500);
@@ -1377,6 +1388,11 @@ function showCollectionScreen() {
 }
 
 function showEnding() {
+    // Sync story completion to backend
+    if (typeof window.onStoryCompleted === 'function') {
+        window.onStoryCompleted();
+    }
+    
     document.getElementById('game-screen').classList.remove('active');
     document.getElementById('ending-screen').classList.add('active');
     

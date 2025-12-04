@@ -16,6 +16,13 @@ const {
     nicknameExists,
     authenticateToken 
 } = require('./auth');
+const {
+    recordFishCaught,
+    recordLegacyUnlocked,
+    markStoryCompleted,
+    getUserProgress,
+    getLeaderboardWithUsers
+} = require('./gameProgress');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -300,6 +307,113 @@ app.get('/api/auth/check-nickname/:nickname', async (req, res) => {
         res.json({ available: !exists });
     } catch (error) {
         res.status(500).json({ error: 'Failed to check nickname' });
+    }
+});
+
+/**
+ * Record a caught fish
+ * POST /api/progress/fish
+ */
+app.post('/api/progress/fish', authenticateToken, async (req, res) => {
+    try {
+        const { fishId, fishName } = req.body;
+
+        if (!fishId || !fishName) {
+            return res.status(400).json({ error: 'Fish ID and name required' });
+        }
+
+        await recordFishCaught(req.user.id, fishId, fishName);
+
+        res.json({
+            success: true,
+            message: 'Fish recorded'
+        });
+
+    } catch (error) {
+        console.error('Error recording fish:', error);
+        res.status(500).json({ error: 'Failed to record fish' });
+    }
+});
+
+/**
+ * Record a legacy unlocked
+ * POST /api/progress/legacy
+ */
+app.post('/api/progress/legacy', authenticateToken, async (req, res) => {
+    try {
+        const { legacyName } = req.body;
+
+        if (!legacyName) {
+            return res.status(400).json({ error: 'Legacy name required' });
+        }
+
+        await recordLegacyUnlocked(req.user.id, legacyName);
+
+        res.json({
+            success: true,
+            message: 'Legacy recorded'
+        });
+
+    } catch (error) {
+        console.error('Error recording legacy:', error);
+        res.status(500).json({ error: 'Failed to record legacy' });
+    }
+});
+
+/**
+ * Mark story as completed
+ * POST /api/progress/complete-story
+ */
+app.post('/api/progress/complete-story', authenticateToken, async (req, res) => {
+    try {
+        await markStoryCompleted(req.user.id);
+
+        res.json({
+            success: true,
+            message: 'Story completion recorded'
+        });
+
+    } catch (error) {
+        console.error('Error marking story complete:', error);
+        res.status(500).json({ error: 'Failed to mark story complete' });
+    }
+});
+
+/**
+ * Get user's game progress
+ * GET /api/progress
+ */
+app.get('/api/progress', authenticateToken, async (req, res) => {
+    try {
+        const progress = await getUserProgress(req.user.id);
+
+        res.json({
+            success: true,
+            progress
+        });
+
+    } catch (error) {
+        console.error('Error fetching progress:', error);
+        res.status(500).json({ error: 'Failed to fetch progress' });
+    }
+});
+
+/**
+ * Get leaderboard with user progress
+ * GET /api/progress/leaderboard
+ */
+app.get('/api/progress/leaderboard', async (req, res) => {
+    try {
+        const leaderboard = await getLeaderboardWithUsers();
+
+        res.json({
+            success: true,
+            leaderboard
+        });
+
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        res.status(500).json({ error: 'Failed to fetch leaderboard' });
     }
 });
 
