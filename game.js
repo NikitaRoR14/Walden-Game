@@ -742,65 +742,14 @@ function showMainMenu() {
         mainMenu.classList.add('active');
     }
     
-    // Update menu UI based on auth status
-    updateMenuAuthState();
+    // Show/hide profile button based on auth
+    const viewProfileBtn = document.getElementById('view-profile-btn');
+    const isAuth = typeof isAuthenticated === 'function' && isAuthenticated();
+    if (viewProfileBtn) {
+        viewProfileBtn.style.display = isAuth ? 'flex' : 'none';
+    }
     
     gameState.mode = 'menu';
-}
-
-function updateMenuAuthState() {
-    const avatarEmojis = {
-        'thoreau': '🧔',
-        'emerson': '🎩',
-        'woodchopper': '🪓',
-        'merchant': '💼',
-        'student': '📚',
-        'nature': '🌿',
-        'book': '📖',
-        'cabin': '🏠'
-    };
-    
-    const menuUserBar = document.getElementById('menu-user-bar');
-    const viewProfileBtn = document.getElementById('view-profile-btn');
-    const authSection = document.getElementById('auth-section');
-    
-    // Check if user is authenticated (using api-client functions if available)
-    const isAuth = typeof isAuthenticated === 'function' && isAuthenticated();
-    
-    if (isAuth && typeof getCurrentUser === 'function') {
-        const user = getCurrentUser();
-        
-        // Show user bar
-        menuUserBar.style.display = 'flex';
-        menuUserBar.innerHTML = `
-            <div class="user-info-section">
-                <div class="user-avatar-menu">${avatarEmojis[user.avatar] || '👤'}</div>
-                <div class="user-details">
-                    <div class="user-nickname">${user.nickname}</div>
-                    <div class="user-stats">Welcome back to Walden</div>
-                </div>
-            </div>
-            <div class="user-actions">
-                <button class="user-action-btn" onclick="window.location.href='profile.html'">📊 Profile</button>
-                <button class="user-action-btn" onclick="if(confirm('Logout?')){localStorage.removeItem('walden_auth_token');localStorage.removeItem('walden_user');location.reload();}">🚪 Logout</button>
-            </div>
-        `;
-        
-        // Show profile button
-        if (viewProfileBtn) viewProfileBtn.style.display = 'flex';
-        
-        // Hide auth section
-        if (authSection) authSection.style.display = 'none';
-    } else {
-        // Hide user bar
-        menuUserBar.style.display = 'none';
-        
-        // Hide profile button
-        if (viewProfileBtn) viewProfileBtn.style.display = 'none';
-        
-        // Show auth section
-        if (authSection) authSection.style.display = 'block';
-    }
 }
 
 function startStoryMode() {
