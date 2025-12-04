@@ -749,10 +749,23 @@ function showMainMenu() {
         viewProfileBtn.style.display = isAuth ? 'flex' : 'none';
     }
     
+    // Start menu particles
+    if (typeof initMenuParticles === 'function') {
+        initMenuParticles();
+    }
+    
     gameState.mode = 'menu';
 }
 
+function hideMainMenu() {
+    // Stop menu particles when leaving
+    if (typeof stopMenuParticles === 'function') {
+        stopMenuParticles();
+    }
+}
+
 function startStoryMode() {
+    hideMainMenu();
     gameState.mode = 'story';
     resetGameState();
     document.getElementById('main-menu').classList.remove('active');
@@ -776,6 +789,7 @@ function startStoryMode() {
 }
 
 function startFreePlayMode() {
+    hideMainMenu();
     gameState.mode = 'freeplay';
     resetGameState();
     document.getElementById('main-menu').classList.remove('active');

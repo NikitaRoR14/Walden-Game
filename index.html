@@ -11,34 +11,76 @@
 </head>
 <body>
     <div id="game-container">
-        <div id="main-menu" class="screen">
-            <div class="menu-content">
-                <h1>Voices at the Pond</h1>
-                <p class="subtitle">A game about Henry David Thoreau's experiment at Walden</p>
-                
-                <div class="menu-buttons">
-                    <button id="story-mode-btn" class="menu-button">
-                        <span class="button-title">📖 Story Mode</span>
-                        <span class="button-desc">Experience Thoreau's philosophical journey</span>
-                    </button>
-                    
-                    <button id="freeplay-mode-btn" class="menu-button">
-                        <span class="button-title">🎣 Free Play</span>
-                        <span class="button-desc">Catch all the fish from Thoreau's writings</span>
-                    </button>
-                    
-                    <button id="view-collection-btn" class="menu-button">
-                        <span class="button-title">📚 Fish Collection</span>
-                        <span class="button-desc">View your collected species</span>
-                    </button>
-                    
-                    <button id="view-profile-btn" class="menu-button" style="display: none;">
-                        <span class="button-title">👤 Your Profile</span>
-                        <span class="button-desc">View stats and achievements</span>
-                    </button>
+        <div id="main-menu" class="screen fullscreen-menu">
+            <!-- Particle Container -->
+            <canvas id="menu-particles" class="particle-canvas"></canvas>
+            
+            <!-- Background Image -->
+            <div class="menu-background"></div>
+            
+            <!-- Decorative Elements -->
+            <div class="menu-decoration leaf-branch"></div>
+            <div class="menu-decoration bird"></div>
+            <div class="menu-decoration tree-left"></div>
+            <div class="menu-decoration tree-right"></div>
+            
+            <!-- Menu Content -->
+            <div class="fullscreen-menu-content">
+                <!-- Quote -->
+                <div class="menu-quote-top">
+                    "I went to the woods because I wished to live deliberately..."
                 </div>
                 
-                <p class="flavor-text">"I went to the woods because I wished to live deliberately..."</p>
+                <!-- Title -->
+                <h1 class="menu-title-large">Voices at the Pond</h1>
+                <p class="menu-subtitle-large">A game about Henry David Thoreau's experiment at Walden</p>
+                
+                <!-- Menu Buttons -->
+                <div class="fullscreen-menu-buttons">
+                    <button id="story-mode-btn" class="fullscreen-menu-button">
+                        <div class="button-icon-large">
+                            <img src="assets/images/UI/bookUI.png" alt="Story Mode">
+                        </div>
+                        <div class="button-text-large">
+                            <h2 class="button-title-large">Story Mode</h2>
+                            <p class="button-desc-large">Experience Thoreau's philosophical journey</p>
+                        </div>
+                        <div class="button-arrow-large">→</div>
+                    </button>
+                    
+                    <button id="freeplay-mode-btn" class="fullscreen-menu-button">
+                        <div class="button-icon-large">
+                            <img src="assets/images/UI/grassUI.png" alt="Free Play">
+                        </div>
+                        <div class="button-text-large">
+                            <h2 class="button-title-large">Free Play</h2>
+                            <p class="button-desc-large">Catch all the fish from Thoreau's writings</p>
+                        </div>
+                        <div class="button-arrow-large">→</div>
+                    </button>
+                    
+                    <button id="view-collection-btn" class="fullscreen-menu-button">
+                        <div class="button-icon-large">
+                            <img src="assets/images/UI/fishUI.png" alt="Fish Collection">
+                        </div>
+                        <div class="button-text-large">
+                            <h2 class="button-title-large">Fish Collection</h2>
+                            <p class="button-desc-large">View your collected species</p>
+                        </div>
+                        <div class="button-arrow-large">→</div>
+                    </button>
+                    
+                    <button id="view-profile-btn" class="fullscreen-menu-button" style="display: none;">
+                        <div class="button-icon-large">
+                            <img src="assets/images/UI/person.png" alt="Profile">
+                        </div>
+                        <div class="button-text-large">
+                            <h2 class="button-title-large">Your Profile</h2>
+                            <p class="button-desc-large">View stats and achievements</p>
+                        </div>
+                        <div class="button-arrow-large">→</div>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -360,6 +402,7 @@
     <!-- Backend Integration Scripts -->
     <script src="api-client.js"></script>
     <script src="game-backend-sync.js"></script>
+    <script src="menu-particles.js"></script>
     <script src="game.js"></script>
 </body>
 </html>

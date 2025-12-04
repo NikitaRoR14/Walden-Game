@@ -98,13 +98,101 @@ body {
     }
 }
 
-/* Main Menu */
-#main-menu {
-    background: linear-gradient(to bottom, #3d5a6f 0%, #4a6f7f 50%, #5a7a6f 100%);
-    padding: 40px;
-    text-align: center;
-    position: relative;
+/* Fullscreen Main Menu */
+.fullscreen-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Particle Canvas */
+.particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Menu Background */
+.menu-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('assets/images/UI/background.png');
+    background-size: cover;
+    background-position: center;
+    z-index: 0;
+}
+
+/* Fallback gradient if image doesn't load */
+.menu-background::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #4a7c7c 0%, #6a9f8f 50%, #d4b896 100%);
+    z-index: -1;
+}
+
+/* Decorative Elements */
+.menu-decoration {
+    position: absolute;
+    z-index: 1;
+    opacity: 0.6;
+    animation: fadeInSlow 2s ease-out;
+}
+
+.leaf-branch {
+    top: 20px;
+    left: 20px;
+    width: 200px;
+    height: 150px;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M10,50 Q20,30 40,20 Q50,15 60,20 Q80,30 90,50" fill="none" stroke="rgba(0,0,0,0.3)" stroke-width="2"/><ellipse cx="25" cy="35" rx="8" ry="12" fill="rgba(0,0,0,0.3)" transform="rotate(-30 25 35)"/><ellipse cx="45" cy="25" rx="10" ry="15" fill="rgba(0,0,0,0.3)" transform="rotate(-15 45 25)"/><ellipse cx="65" cy="30" rx="9" ry="13" fill="rgba(0,0,0,0.3)" transform="rotate(15 65 30)"/><ellipse cx="85" cy="45" rx="8" ry="12" fill="rgba(0,0,0,0.3)" transform="rotate(30 85 45)"/></svg>') no-repeat;
+    background-size: contain;
+    animation: sway 6s ease-in-out infinite;
+}
+
+.bird {
+    top: 100px;
+    right: 150px;
+    width: 60px;
+    height: 40px;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 40"><path d="M10,20 Q20,10 30,15 Q40,10 50,20" fill="none" stroke="rgba(0,0,0,0.4)" stroke-width="3" stroke-linecap="round"/></svg>') no-repeat;
+    background-size: contain;
+    animation: birdFly 20s linear infinite;
+}
+
+.tree-left, .tree-right {
+    bottom: 0;
+    width: 300px;
+    height: 100%;
+    background-repeat: no-repeat;
+    background-position: bottom;
+    background-size: contain;
+    opacity: 0.4;
+}
+
+.tree-left {
+    left: -50px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 500"><path d="M100,450 L100,200 Q90,180 85,160 Q80,140 75,120 Q70,100 65,80 Q60,60 55,40 Q50,20 45,0" fill="none" stroke="rgba(0,0,0,0.3)" stroke-width="8"/><ellipse cx="60" cy="150" rx="40" ry="80" fill="rgba(0,0,0,0.25)"/><ellipse cx="50" cy="100" rx="50" ry="90" fill="rgba(0,0,0,0.25)"/><ellipse cx="70" cy="80" rx="45" ry="85" fill="rgba(0,0,0,0.25)"/></svg>');
+}
+
+.tree-right {
+    right: -50px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 500"><path d="M100,450 L100,200 Q110,180 115,160 Q120,140 125,120 Q130,100 135,80 Q140,60 145,40 Q150,20 155,0" fill="none" stroke="rgba(0,0,0,0.3)" stroke-width="8"/><ellipse cx="140" cy="150" rx="40" ry="80" fill="rgba(0,0,0,0.25)"/><ellipse cx="150" cy="100" rx="50" ry="90" fill="rgba(0,0,0,0.25)"/><ellipse cx="130" cy="80" rx="45" ry="85" fill="rgba(0,0,0,0.25)"/></svg>');
 }
 
 #main-menu::before {
@@ -120,17 +208,55 @@ body {
     pointer-events: none;
 }
 
-.menu-content {
-    background: rgba(44, 62, 50, 0.85);
-    padding: 60px 40px;
-    border-radius: 15px;
-    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5);
-    max-width: 700px;
-    margin: 0 auto;
-    border: 2px solid rgba(139, 115, 85, 0.3);
+/* Fullscreen Menu Content */
+.fullscreen-menu-content {
     position: relative;
-    z-index: 1;
-    animation: fadeInUp 0.8s ease-out;
+    z-index: 10;
+    text-align: center;
+    max-width: 900px;
+    width: 90%;
+    padding: 40px 20px;
+    animation: fadeInUp 1s ease-out;
+}
+
+/* Top Quote */
+.menu-quote-top {
+    font-size: 1.8em;
+    color: #f5e6d3;
+    font-style: italic;
+    font-family: 'Georgia', serif;
+    margin-bottom: 60px;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    animation: fadeIn 1.5s ease-out 0.3s forwards;
+    letter-spacing: 0.5px;
+    line-height: 1.6;
+}
+
+/* Large Title */
+.menu-title-large {
+    font-size: 5em;
+    color: #ffffff;
+    font-family: 'Georgia', serif;
+    font-weight: bold;
+    margin: 20px 0;
+    text-shadow: 
+        3px 3px 0px rgba(0, 0, 0, 0.3),
+        5px 5px 10px rgba(0, 0, 0, 0.4),
+        0 0 30px rgba(255, 255, 255, 0.2);
+    letter-spacing: 2px;
+    opacity: 0;
+    animation: fadeInScale 1s ease-out 0.6s forwards;
+}
+
+.menu-subtitle-large {
+    font-size: 1.5em;
+    color: #e8dcc4;
+    font-family: 'Georgia', serif;
+    margin-bottom: 60px;
+    text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    animation: fadeIn 1s ease-out 0.9s forwards;
 }
 
 .menu-content h1 {
@@ -151,31 +277,50 @@ body {
 }
 
 
-.menu-buttons {
+/* Fullscreen Menu Buttons */
+.fullscreen-menu-buttons {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    margin: 30px 0;
+    gap: 25px;
+    margin: 0 auto;
+    max-width: 800px;
 }
 
-.menu-button {
-    background: linear-gradient(to right, rgba(90, 122, 111, 0.8) 0%, rgba(74, 111, 95, 0.8) 100%);
-    color: #e8dcc4;
-    border: 2px solid rgba(139, 115, 85, 0.4);
-    padding: 20px 30px;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-align: left;
+.fullscreen-menu-button {
+    background: rgba(45, 65, 60, 0.75);
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(200, 180, 150, 0.4);
+    border-radius: 15px;
+    padding: 25px 35px;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    align-items: center;
+    gap: 25px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: left;
     position: relative;
     overflow: hidden;
+    opacity: 0;
+    transform: translateX(-50px);
 }
 
-.menu-button::before {
+.fullscreen-menu-buttons .fullscreen-menu-button:nth-child(1) {
+    animation: slideInButton 0.8s ease-out 1.2s forwards;
+}
+
+.fullscreen-menu-buttons .fullscreen-menu-button:nth-child(2) {
+    animation: slideInButton 0.8s ease-out 1.4s forwards;
+}
+
+.fullscreen-menu-buttons .fullscreen-menu-button:nth-child(3) {
+    animation: slideInButton 0.8s ease-out 1.6s forwards;
+}
+
+.fullscreen-menu-buttons .fullscreen-menu-button:nth-child(4) {
+    animation: slideInButton 0.8s ease-out 1.8s forwards;
+}
+
+.fullscreen-menu-button::before {
     content: '';
     position: absolute;
     top: 0;
@@ -185,37 +330,71 @@ body {
     background: linear-gradient(
         90deg,
         transparent,
-        rgba(255, 255, 255, 0.2),
+        rgba(255, 255, 255, 0.15),
         transparent
     );
-    transition: left 0.6s;
+    transition: left 0.8s;
 }
 
-.menu-button:hover::before {
+.fullscreen-menu-button:hover::before {
     left: 100%;
 }
 
-.menu-buttons .menu-button:nth-child(1) {
-    animation: slideIn 0.5s ease-out 0.6s both;
+.fullscreen-menu-button:hover {
+    background: rgba(55, 75, 70, 0.85);
+    border-color: rgba(220, 200, 170, 0.6);
+    transform: translateX(10px) scale(1.02);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
-.menu-buttons .menu-button:nth-child(2) {
-    animation: slideIn 0.5s ease-out 0.8s both;
+.button-icon-large {
+    width: 70px;
+    height: 70px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 
-.menu-buttons .menu-button:nth-child(3) {
-    animation: slideIn 0.5s ease-out 1s both;
+.button-icon-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
-.menu-buttons .menu-button:nth-child(4) {
-    animation: slideIn 0.5s ease-out 1.2s both;
+.button-text-large {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.menu-button:hover {
-    background: linear-gradient(to right, rgba(100, 142, 121, 0.9) 0%, rgba(84, 121, 105, 0.9) 100%);
-    transform: translateY(-3px) scale(1.02);
-    border-color: rgba(139, 115, 85, 0.6);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+.button-title-large {
+    font-size: 2em;
+    color: #ffffff;
+    font-family: 'Georgia', serif;
+    font-weight: bold;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.button-desc-large {
+    font-size: 1.1em;
+    color: #d4c4a8;
+    font-style: italic;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.button-arrow-large {
+    font-size: 2.5em;
+    color: #d4c4a8;
+    transition: transform 0.3s ease;
+}
+
+.fullscreen-menu-button:hover .button-arrow-large {
+    transform: translateX(10px);
 }
 
 
@@ -223,24 +402,60 @@ body {
     transform: translateY(-1px);
 }
 
-.button-title {
-    font-size: 1.4em;
-    font-weight: bold;
-    font-family: 'Georgia', serif;
+/* Animations */
+@keyframes fadeInSlow {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 0.6;
+    }
 }
 
-.button-desc {
-    font-size: 0.9em;
-    color: #c9b896;
-    font-style: italic;
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
-.flavor-text {
-    font-size: 0.9em;
-    color: #a89876;
-    margin-top: 30px;
-    font-style: italic;
-    animation: fadeInUp 0.8s ease-out 1.4s both;
+@keyframes slideInButton {
+    from {
+        opacity: 0;
+        transform: translateX(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes sway {
+    0%, 100% {
+        transform: rotate(0deg);
+    }
+    50% {
+        transform: rotate(3deg);
+    }
+}
+
+@keyframes birdFly {
+    0% {
+        transform: translateX(0) translateY(0);
+    }
+    50% {
+        transform: translateX(100vw) translateY(-50px);
+    }
+    50.01% {
+        transform: translateX(-60px) translateY(-50px);
+    }
+    100% {
+        transform: translateX(0) translateY(0);
+    }
 }
 
 .main-button {
