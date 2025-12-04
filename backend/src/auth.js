@@ -3,9 +3,9 @@
  * Handles user registration, login, and JWT tokens
  */
 
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
@@ -20,34 +20,63 @@ if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
 }
 
-// Initialize database
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+// Initialize database with promisify wrapper
+const db = new sqlite3.Database(DB_PATH);
+
+// Helper to promisify database operations
+const dbRun = (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function(err) {
+            if (err) reject(err);
+            else resolve({ lastID: this.lastID, changes: this.changes });
+        });
+    });
+};
+
+const dbGet = (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+        });
+    });
+};
+
+const dbAll = (sql, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
+        });
+    });
+};
 
 /**
  * Initialize authentication tables
  */
-function initAuthTables() {
-    // Users table
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            nickname TEXT UNIQUE NOT NULL,
-            avatar TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_login DATETIME
-        )
-    `);
+async function initAuthTables() {
+    try {
+        // Users table
+        await dbRun(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                nickname TEXT UNIQUE NOT NULL,
+                avatar TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_login DATETIME
+            )
+        `);
 
-    // Create indices
-    db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_email ON users(email);
-        CREATE INDEX IF NOT EXISTS idx_nickname ON users(nickname);
-    `);
+        // Create indices
+        await dbRun(`CREATE INDEX IF NOT EXISTS idx_email ON users(email)`);
+        await dbRun(`CREATE INDEX IF NOT EXISTS idx_nickname ON users(nickname)`);
 
-    console.log('✓ Authentication tables initialized');
+        console.log('✓ Authentication tables initialized');
+    } catch (error) {
+        console.error('Error initializing auth tables:', error);
+    }
 }
 
 /**
@@ -59,15 +88,13 @@ async function registerUser(email, password, nickname, avatar) {
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
         // Insert user
-        const stmt = db.prepare(`
-            INSERT INTO users (email, password_hash, nickname, avatar)
-            VALUES (?, ?, ?, ?)
-        `);
-
-        const result = stmt.run(email.toLowerCase(), passwordHash, nickname, avatar);
+        const result = await dbRun(
+            `INSERT INTO users (email, password_hash, nickname, avatar) VALUES (?, ?, ?, ?)`,
+            [email.toLowerCase(), passwordHash, nickname, avatar]
+        );
 
         return {
-            id: result.lastInsertRowid,
+            id: result.lastID,
             email: email.toLowerCase(),
             nickname,
             avatar
@@ -88,8 +115,7 @@ async function registerUser(email, password, nickname, avatar) {
  */
 async function loginUser(email, password) {
     // Get user
-    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-    const user = stmt.get(email.toLowerCase());
+    const user = await dbGet('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
 
     if (!user) {
         throw new Error('Invalid email or password');
@@ -103,8 +129,7 @@ async function loginUser(email, password) {
     }
 
     // Update last login
-    const updateStmt = db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?');
-    updateStmt.run(user.id);
+    await dbRun('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
 
     // Generate JWT token
     const token = jwt.sign(
@@ -143,30 +168,26 @@ function verifyToken(token) {
 /**
  * Get user by ID
  */
-function getUserById(userId) {
-    const stmt = db.prepare(`
-        SELECT id, email, nickname, avatar, created_at, last_login
-        FROM users
-        WHERE id = ?
-    `);
-    return stmt.get(userId);
+async function getUserById(userId) {
+    return await dbGet(
+        `SELECT id, email, nickname, avatar, created_at, last_login FROM users WHERE id = ?`,
+        [userId]
+    );
 }
 
 /**
  * Check if email exists
  */
-function emailExists(email) {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM users WHERE email = ?');
-    const result = stmt.get(email.toLowerCase());
+async function emailExists(email) {
+    const result = await dbGet('SELECT COUNT(*) as count FROM users WHERE email = ?', [email.toLowerCase()]);
     return result.count > 0;
 }
 
 /**
  * Check if nickname exists
  */
-function nicknameExists(nickname) {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM users WHERE nickname = ?');
-    const result = stmt.get(nickname);
+async function nicknameExists(nickname) {
+    const result = await dbGet('SELECT COUNT(*) as count FROM users WHERE nickname = ?', [nickname]);
     return result.count > 0;
 }
 
@@ -201,6 +222,9 @@ module.exports = {
     emailExists,
     nicknameExists,
     authenticateToken,
-    db
+    db,
+    dbRun,
+    dbGet,
+    dbAll
 };
 
