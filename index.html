@@ -12,28 +12,95 @@
 <body>
     <div id="game-container">
         <div id="main-menu" class="screen">
+            <!-- User Status Bar -->
+            <div class="menu-user-bar" id="menu-user-bar">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            
             <div class="menu-content">
-                <h1>Voices at the Pond</h1>
-                <p class="subtitle">A game about Henry David Thoreau's experiment at Walden</p>
-                
-                <div class="menu-buttons">
-                    <button id="story-mode-btn" class="menu-button">
-                        <span class="button-title">📖 Story Mode</span>
-                        <span class="button-desc">Experience Thoreau's philosophical journey</span>
-                    </button>
-                    
-                    <button id="freeplay-mode-btn" class="menu-button">
-                        <span class="button-title">🎣 Free Play</span>
-                        <span class="button-desc">Catch all the fish from Thoreau's writings</span>
-                    </button>
-                    
-                    <button id="view-collection-btn" class="menu-button">
-                        <span class="button-title">📚 Fish Collection</span>
-                        <span class="button-desc">View your collected species</span>
-                    </button>
+                <!-- Title with animated leaves -->
+                <div class="menu-title-wrapper">
+                    <div class="title-decoration left">🍂</div>
+                    <div class="title-main">
+                        <h1>Voices at the Pond</h1>
+                        <p class="subtitle">A Walden Experience</p>
+                    </div>
+                    <div class="title-decoration right">🍃</div>
                 </div>
                 
-                <p class="flavor-text">"I went to the woods because I wished to live deliberately..."</p>
+                <!-- Main Game Modes -->
+                <div class="menu-section">
+                    <h2 class="section-heading">🎮 Play</h2>
+                    <div class="menu-buttons">
+                        <button id="story-mode-btn" class="menu-button primary-button">
+                            <div class="button-icon">📖</div>
+                            <div class="button-content">
+                                <span class="button-title">Story Mode</span>
+                                <span class="button-desc">Experience Thoreau's philosophical journey at Walden Pond</span>
+                            </div>
+                            <div class="button-arrow">→</div>
+                        </button>
+                        
+                        <button id="freeplay-mode-btn" class="menu-button primary-button">
+                            <div class="button-icon">🎣</div>
+                            <div class="button-content">
+                                <span class="button-title">Free Play</span>
+                                <span class="button-desc">Fish peacefully and collect all species from his writings</span>
+                            </div>
+                            <div class="button-arrow">→</div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Collection & Profile -->
+                <div class="menu-section">
+                    <h2 class="section-heading">📚 Your Journey</h2>
+                    <div class="menu-buttons secondary">
+                        <button id="view-collection-btn" class="menu-button secondary-button">
+                            <div class="button-icon">🐟</div>
+                            <div class="button-content">
+                                <span class="button-title">Fish Collection</span>
+                                <span class="button-desc">View all species you've discovered</span>
+                            </div>
+                        </button>
+                        
+                        <button id="view-profile-btn" class="menu-button secondary-button" style="display: none;">
+                            <div class="button-icon">👤</div>
+                            <div class="button-content">
+                                <span class="button-title">Your Profile</span>
+                                <span class="button-desc">View stats, legacies, and achievements</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Authentication Section (shown when not logged in) -->
+                <div class="menu-section" id="auth-section" style="display: none;">
+                    <h2 class="section-heading">🔐 Account</h2>
+                    <div class="menu-buttons secondary">
+                        <button id="login-btn" class="menu-button secondary-button">
+                            <div class="button-icon">🔑</div>
+                            <div class="button-content">
+                                <span class="button-title">Login</span>
+                                <span class="button-desc">Access your saved progress</span>
+                            </div>
+                        </button>
+                        
+                        <button id="signup-btn" class="menu-button secondary-button">
+                            <div class="button-icon">✨</div>
+                            <div class="button-content">
+                                <span class="button-title">Create Account</span>
+                                <span class="button-desc">Start your Walden journey</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Thoreau Quote -->
+                <div class="menu-quote">
+                    <p class="quote-text">"I went to the woods because I wished to live deliberately, to front only the essential facts of life..."</p>
+                    <p class="quote-author">— Henry David Thoreau</p>
+                </div>
             </div>
         </div>
 

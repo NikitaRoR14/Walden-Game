@@ -161,14 +161,15 @@ async function getUserProgress(userId) {
     // If no progress entry exists, create one
     if (!progress) {
         await dbRun(
-            `INSERT INTO user_progress (user_id) VALUES (?)`,
+            `INSERT INTO user_progress (user_id, play_time_seconds) VALUES (?, 0)`,
             [userId]
         );
         progress = {
             user_id: userId,
             total_fish_caught: 0,
             total_legacies: 0,
-            story_completed: 0
+            story_completed: 0,
+            play_time_seconds: 0
         };
     }
 
@@ -188,10 +189,13 @@ async function getUserProgress(userId) {
  * Update total fish caught count
  */
 async function updateTotalFishCaught(userId) {
+    // Ensure user_progress exists
+    await ensureUserProgressExists(userId);
+    
     await dbRun(
         `UPDATE user_progress 
         SET total_fish_caught = (
-            SELECT SUM(times_caught) FROM user_fish WHERE user_id = ?
+            SELECT COALESCE(SUM(times_caught), 0) FROM user_fish WHERE user_id = ?
         ),
         last_updated = CURRENT_TIMESTAMP
         WHERE user_id = ?`,
@@ -200,9 +204,25 @@ async function updateTotalFishCaught(userId) {
 }
 
 /**
+ * Ensure user_progress entry exists
+ */
+async function ensureUserProgressExists(userId) {
+    const exists = await dbGet('SELECT user_id FROM user_progress WHERE user_id = ?', [userId]);
+    if (!exists) {
+        await dbRun(
+            `INSERT INTO user_progress (user_id, play_time_seconds) VALUES (?, 0)`,
+            [userId]
+        );
+    }
+}
+
+/**
  * Update total legacies count
  */
 async function updateTotalLegacies(userId) {
+    // Ensure user_progress exists
+    await ensureUserProgressExists(userId);
+    
     await dbRun(
         `UPDATE user_progress 
         SET total_legacies = (
@@ -218,9 +238,12 @@ async function updateTotalLegacies(userId) {
  * Update play time
  */
 async function updatePlayTime(userId, secondsToAdd) {
+    // Ensure user_progress exists
+    await ensureUserProgressExists(userId);
+    
     await dbRun(
         `UPDATE user_progress 
-        SET play_time_seconds = play_time_seconds + ?,
+        SET play_time_seconds = COALESCE(play_time_seconds, 0) + ?,
             last_updated = CURRENT_TIMESTAMP
         WHERE user_id = ?`,
         [secondsToAdd, userId]
