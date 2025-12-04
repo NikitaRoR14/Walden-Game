@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Walden Journey - Profile</title>
+    <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+    <!-- Background Animation -->
+    <div class="leaves-background" id="leaves-bg"></div>
+    
+    <!-- Main Container -->
+    <div class="profile-container">
+        <!-- Header -->
+        <header class="profile-header">
+            <div class="header-content">
+                <a href="index.html" class="back-button">← Back to Walden Pond</a>
+                <h1>Your Journey at Walden</h1>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </header>
+
+        <!-- Main Profile Content -->
+        <main class="profile-main">
+            <!-- User Card -->
+            <section class="user-card">
+                <div class="avatar-large" id="userAvatar">👤</div>
+                <h2 class="username" id="userName">Loading...</h2>
+                <p class="member-since" id="memberSince">Member since...</p>
+            </section>
+
+            <!-- Stats Grid -->
+            <section class="stats-grid">
+                <!-- Play Time -->
+                <div class="stat-card time-card">
+                    <div class="stat-icon">⏰</div>
+                    <div class="stat-content">
+                        <h3>Time at Walden</h3>
+                        <p class="stat-value" id="playTime">0h 0m</p>
+                        <p class="stat-label">Hours of contemplation</p>
+                    </div>
+                </div>
+
+                <!-- Fish Caught -->
+                <div class="stat-card fish-card">
+                    <div class="stat-icon">🎣</div>
+                    <div class="stat-content">
+                        <h3>Fish Caught</h3>
+                        <p class="stat-value" id="totalFish">0</p>
+                        <p class="stat-label">Total catches</p>
+                    </div>
+                </div>
+
+                <!-- Unique Species -->
+                <div class="stat-card species-card">
+                    <div class="stat-icon">🐟</div>
+                    <div class="stat-content">
+                        <h3>Unique Species</h3>
+                        <p class="stat-value" id="uniqueSpecies">0</p>
+                        <p class="stat-label">Different fish discovered</p>
+                    </div>
+                </div>
+
+                <!-- Legacies -->
+                <div class="stat-card legacy-card">
+                    <div class="stat-icon">✨</div>
+                    <div class="stat-content">
+                        <h3>Legacies Unlocked</h3>
+                        <p class="stat-value" id="totalLegacies">0</p>
+                        <p class="stat-label">Philosophical insights gained</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Story Completion -->
+            <section class="completion-section">
+                <div class="completion-card" id="storyStatus">
+                    <div class="completion-icon">📖</div>
+                    <div class="completion-content">
+                        <h3>Story Progress</h3>
+                        <p class="completion-text" id="storyText">Start your journey...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Fish Collection -->
+            <section class="collection-section">
+                <h2 class="section-title">
+                    <span class="title-icon">🐠</span>
+                    Your Fish Collection
+                </h2>
+                <div class="collection-grid" id="fishCollection">
+                    <div class="loading-spinner">Loading your catches...</div>
+                </div>
+            </section>
+
+            <!-- Legacies Earned -->
+            <section class="legacies-section">
+                <h2 class="section-title">
+                    <span class="title-icon">🌟</span>
+                    Philosophical Legacies
+                </h2>
+                <div class="legacies-grid" id="legaciesGrid">
+                    <div class="loading-spinner">Loading your wisdom...</div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer Quote -->
+        <footer class="profile-footer">
+            <p class="quote">"I learned this, at least, by my experiment: that if one advances confidently in the direction of his dreams, and endeavors to live the life which he has imagined, he will meet with a success unexpected in common hours."</p>
+            <p class="quote-author">— Henry David Thoreau</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="api-client.js"></script>
+    <script src="profile.js"></script>
+</body>
+</html>
+

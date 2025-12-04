@@ -245,6 +245,28 @@ async function getUserProgress() {
 }
 
 /**
+ * Update play time
+ */
+async function updatePlayTime(seconds) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/progress/play-time`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ seconds })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating play time:', error);
+        return null;
+    }
+}
+
+/**
  * Get progress leaderboard
  */
 async function getProgressLeaderboard() {

@@ -12,14 +12,15 @@ async function initProgressTables() {
     try {
         // User game progress table
         await dbRun(`
-            CREATE TABLE IF NOT EXISTS user_progress (
-                user_id INTEGER PRIMARY KEY,
-                total_fish_caught INTEGER DEFAULT 0,
-                total_legacies INTEGER DEFAULT 0,
-                story_completed BOOLEAN DEFAULT 0,
-                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
+        CREATE TABLE IF NOT EXISTS user_progress (
+            user_id INTEGER PRIMARY KEY,
+            total_fish_caught INTEGER DEFAULT 0,
+            total_legacies INTEGER DEFAULT 0,
+            story_completed BOOLEAN DEFAULT 0,
+            play_time_seconds INTEGER DEFAULT 0,
+            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
         `);
 
         // Fish caught by users
@@ -214,6 +215,19 @@ async function updateTotalLegacies(userId) {
 }
 
 /**
+ * Update play time
+ */
+async function updatePlayTime(userId, secondsToAdd) {
+    await dbRun(
+        `UPDATE user_progress 
+        SET play_time_seconds = play_time_seconds + ?,
+            last_updated = CURRENT_TIMESTAMP
+        WHERE user_id = ?`,
+        [secondsToAdd, userId]
+    );
+}
+
+/**
  * Get leaderboard with user info
  */
 async function getLeaderboardWithUsers() {
@@ -223,7 +237,8 @@ async function getLeaderboardWithUsers() {
             users.avatar,
             user_progress.total_fish_caught,
             user_progress.total_legacies,
-            user_progress.story_completed
+            user_progress.story_completed,
+            user_progress.play_time_seconds
         FROM user_progress
         JOIN users ON user_progress.user_id = users.id
         ORDER BY user_progress.total_legacies DESC, user_progress.total_fish_caught DESC
@@ -241,6 +256,7 @@ module.exports = {
     getUserFish,
     getUserLegacies,
     getUserProgress,
+    updatePlayTime,
     getLeaderboardWithUsers
 };
 

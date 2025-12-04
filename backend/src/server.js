@@ -21,6 +21,7 @@ const {
     recordLegacyUnlocked,
     markStoryCompleted,
     getUserProgress,
+    updatePlayTime,
     getLeaderboardWithUsers
 } = require('./gameProgress');
 
@@ -395,6 +396,31 @@ app.get('/api/progress', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error fetching progress:', error);
         res.status(500).json({ error: 'Failed to fetch progress' });
+    }
+});
+
+/**
+ * Update play time
+ * POST /api/progress/play-time
+ */
+app.post('/api/progress/play-time', authenticateToken, async (req, res) => {
+    try {
+        const { seconds } = req.body;
+
+        if (!seconds || seconds < 0) {
+            return res.status(400).json({ error: 'Valid seconds required' });
+        }
+
+        await updatePlayTime(req.user.id, seconds);
+
+        res.json({
+            success: true,
+            message: 'Play time updated'
+        });
+
+    } catch (error) {
+        console.error('Error updating play time:', error);
+        res.status(500).json({ error: 'Failed to update play time' });
     }
 });
 

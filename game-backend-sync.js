@@ -5,6 +5,10 @@
  * Usage: Include this AFTER api-client.js and BEFORE game.js in index.html
  */
 
+// Play time tracking
+let playTimeStart = null;
+let playTimeInterval = null;
+
 // Check if user is authenticated
 if (!isAuthenticated()) {
     console.log('User not authenticated, skipping backend sync');
@@ -14,6 +18,45 @@ if (!isAuthenticated()) {
     // Get current user
     const currentUser = getCurrentUser();
     console.log(`Playing as: ${currentUser.nickname}`);
+    
+    // Start play time tracking
+    startPlayTimeTracking();
+}
+
+/**
+ * Start tracking play time
+ */
+function startPlayTimeTracking() {
+    playTimeStart = Date.now();
+    
+    // Update play time every 30 seconds
+    playTimeInterval = setInterval(async () => {
+        const currentTime = Date.now();
+        const secondsPlayed = Math.floor((currentTime - playTimeStart) / 1000);
+        
+        if (secondsPlayed >= 30) {
+            await updatePlayTime(secondsPlayed);
+            playTimeStart = Date.now();
+            console.log(`✓ Play time synced: ${secondsPlayed}s`);
+        }
+    }, 30000);
+    
+    // Also sync on page unload
+    window.addEventListener('beforeunload', async () => {
+        const currentTime = Date.now();
+        const secondsPlayed = Math.floor((currentTime - playTimeStart) / 1000);
+        
+        if (secondsPlayed > 0) {
+            // Use sendBeacon for reliable sending during page unload
+            const data = JSON.stringify({ seconds: secondsPlayed });
+            const token = getAuthToken();
+            
+            navigator.sendBeacon(
+                'http://localhost:3000/api/progress/play-time',
+                new Blob([data], { type: 'application/json' })
+            );
+        }
+    });
 }
 
 /**
@@ -124,7 +167,7 @@ function displayUserInfo() {
         userInfo.innerHTML = `
             <span style="font-size: 1.5em;">${avatarEmojis[user.avatar] || '👤'}</span>
             <div>
-                <div style="font-weight: bold; font-size: 1.1em;">${user.nickname}</div>
+                <div style="font-weight: bold; font-size: 1.1em; cursor: pointer;" onclick="window.location.href='profile.html'" title="View Profile">${user.nickname}</div>
                 <div style="font-size: 0.8em; color: #c9b896; cursor: pointer;" onclick="logout()">Logout</div>
             </div>
         `;

@@ -1154,6 +1154,13 @@ function catchFish() {
         }, 3000);
     } else {
         // Story mode - show phase dialog after catching fish
+        const fish = gameState.fishingMinigame.currentFish;
+        
+        // Sync fish catch to backend (story mode)
+        if (fish && typeof window.onFishCaught === 'function') {
+            window.onFishCaught(fish.id, fish.name);
+        }
+        
         if (gameState.phase < phases.length) {
             setTimeout(() => {
                 showDialog(gameState.phase);
