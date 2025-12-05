@@ -6,6 +6,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { body, validationResult } = require('express-validator');
 const { submitScore, getTopScores, getPlayerRank, getStats } = require('./database');
 const { 
@@ -29,10 +30,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:8080'
-}));
+app.use(cors());
 app.use(express.json());
+
+// Serve static files from parent directory (the game files)
+app.use(express.static(path.join(__dirname, '../..')));
 
 // Request logging
 app.use((req, res, next) => {
@@ -463,10 +465,14 @@ app.use((err, req, res, next) => {
  */
 app.listen(PORT, () => {
     console.log(`
-╔═══════════════════════════════════════╗
-║   Walden Game Backend Server          ║
-║   Running on http://localhost:${PORT}   ║
-╚═══════════════════════════════════════╝
+╔═══════════════════════════════════════════════╗
+║   Walden Game - Full Stack Server            ║
+║                                               ║
+║   🎮 Game: http://localhost:${PORT}                ║
+║   📡 API:  http://localhost:${PORT}/api            ║
+║                                               ║
+║   Frontend + Backend running together! ✨     ║
+╚═══════════════════════════════════════════════╝
     `);
 });
 
