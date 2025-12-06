@@ -218,8 +218,16 @@ function displayUserInfo() {
     userInfo.style.display = 'flex';
 }
 
-// Display user info when page loads
-window.addEventListener('load', displayUserInfo);
+// Display user info when page loads (with retry if api-client.js not loaded yet)
+function tryDisplayUserInfo() {
+    if (typeof isAuthenticated === 'function' && typeof getCurrentUser === 'function') {
+        displayUserInfo();
+    } else {
+        // api-client.js not loaded yet, try again
+        setTimeout(tryDisplayUserInfo, 200);
+    }
+}
+window.addEventListener('load', tryDisplayUserInfo);
 
 // Global hook functions that game.js can call
 window.onFishCaught = syncFishCatch;

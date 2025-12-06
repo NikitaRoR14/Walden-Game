@@ -763,10 +763,16 @@ async function init() {
         });
     }
     
-    // Display user profile button if logged in
-    if (typeof displayUserInfo === 'function') {
-        displayUserInfo();
+    // Display user profile button if logged in (with retry if api-client.js not loaded)
+    function tryDisplayUserInfo() {
+        if (typeof displayUserInfo === 'function' && typeof isAuthenticated === 'function') {
+            displayUserInfo();
+        } else {
+            // api-client.js not loaded yet, try again
+            setTimeout(tryDisplayUserInfo, 200);
+        }
     }
+    tryDisplayUserInfo();
     
     // Initialize particles
     createParticles();
@@ -960,10 +966,16 @@ function showMainMenu() {
         initMenuParticles();
     }
     
-    // Display user info if logged in
-    if (typeof displayUserInfo === 'function') {
-        displayUserInfo();
+    // Display user info if logged in (with retry if api-client.js not loaded)
+    function tryDisplayUserInfo() {
+        if (typeof displayUserInfo === 'function' && typeof isAuthenticated === 'function') {
+            displayUserInfo();
+        } else {
+            // api-client.js not loaded yet, try again
+            setTimeout(tryDisplayUserInfo, 200);
+        }
     }
+    tryDisplayUserInfo();
     
     // Restore menu-only chrome (friends toggle, logout pill)
     setInGameChromeVisibility(true);
@@ -1429,6 +1441,12 @@ function setupFriendsUI() {
 
     const fetchAndRenderSocial = async () => {
         try {
+            // Check if api-client.js is loaded
+            if (typeof fetchFriendsAndSubscriptions !== 'function') {
+                console.warn('api-client.js not loaded, cannot fetch friends');
+                setStatus('Unable to load friends (api-client.js not loaded)', 'error');
+                return;
+            }
             const res = await fetchFriendsAndSubscriptions();
             if (!res || res.error) {
                 setStatus(res?.error || 'Unable to load friends', 'error');
