@@ -7,11 +7,19 @@
 const API_BASE_URL = (() => {
     if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
+        const port = window.location.port;
+        
+        // Local development
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
             return 'http://localhost:3000/api';
         }
+        
         // Production: use same domain (backend serves frontend)
-        return `${window.location.protocol}//${window.location.host}/api`;
+        // Remove /api suffix if present in host to avoid double /api/api
+        const baseUrl = `${protocol}//${hostname}${port ? ':' + port : ''}/api`;
+        console.log('API_BASE_URL detected:', baseUrl, '(hostname:', hostname, ')');
+        return baseUrl;
     }
     return process.env.API_BASE_URL || 'http://localhost:3000/api';
 })();
