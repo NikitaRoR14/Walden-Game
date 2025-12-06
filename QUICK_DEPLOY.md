@@ -17,7 +17,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ### Step 3: Configure
 1. Click on the service
-2. Go to **Settings** → **Root Directory**: Set to `backend`
+2. Go to **Settings** → **Root Directory**: Set to `.` (repo root, NOT `backend`)
+   - This allows Railway to access both backend and frontend files
 3. Go to **Variables** tab, add:
    ```
    JWT_SECRET=<paste-generated-secret>
