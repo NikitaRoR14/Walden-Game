@@ -624,6 +624,15 @@ const pickStaticDir = () => {
 
 const finalStaticDir = pickStaticDir();
 
+// Helper to resolve a specific file across candidate roots
+const resolveFromCandidates = (fileName) => {
+    for (const dir of candidateRoots) {
+        const full = path.join(dir, fileName);
+        if (fs.existsSync(full)) return full;
+    }
+    return null;
+};
+
 console.log('Static files directory:', finalStaticDir);
 console.log('__dirname:', __dirname);
 console.log('Process cwd:', process.cwd());
@@ -645,7 +654,7 @@ app.get('/test-static', (req, res) => {
     const testFiles = ['index.html', 'api-client.js', 'game.js', 'auth.html', 'friends.html'];
     const results = {};
     testFiles.forEach(file => {
-        const filePath = path.join(finalStaticDir, file);
+        const filePath = resolveFromCandidates(file) || path.join(finalStaticDir, file);
         results[file] = {
             exists: fs.existsSync(filePath),
             path: filePath
@@ -678,15 +687,30 @@ app.use((req, res, next) => {
         }
         // If static middleware didn't serve the file, try direct file serving as fallback
         if (!res.headersSent) {
-            const filePath = path.join(finalStaticDir, req.path);
-            if (fs.existsSync(filePath)) {
-                console.log(`Fallback: Serving ${req.path} directly from ${filePath}`);
-                res.sendFile(filePath);
+            const candidate = resolveFromCandidates(req.path.startsWith('/') ? req.path.substring(1) : req.path);
+            if (candidate && fs.existsSync(candidate)) {
+                console.log(`Fallback: Serving ${req.path} directly from ${candidate}`);
+                res.sendFile(candidate);
             } else {
-                next(); // Let 404 handler deal with it
+                const filePath = path.join(finalStaticDir, req.path);
+                if (fs.existsSync(filePath)) {
+                    console.log(`Fallback: Serving ${req.path} directly from ${filePath}`);
+                    res.sendFile(filePath);
+                } else {
+                    next(); // Let 404 handler deal with it
+                }
             }
         }
     });
+});
+
+// Direct fallback for api-client.js if routing missed it
+app.get('/api-client.js', (req, res, next) => {
+    const filePath = resolveFromCandidates('api-client.js');
+    if (filePath && fs.existsSync(filePath)) {
+        return res.sendFile(filePath);
+    }
+    return next();
 });
 
 /**
