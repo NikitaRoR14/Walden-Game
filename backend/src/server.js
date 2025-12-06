@@ -7,6 +7,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { body, validationResult } = require('express-validator');
 const { submitScore, getTopScores, getPlayerRank, getStats } = require('./database');
 const { 
@@ -599,7 +600,32 @@ app.get('/api/progress/leaderboard', async (req, res) => {
  * This must be AFTER all API routes to prevent API requests from being served as static files
  * Skip /api paths to ensure API routes are handled first
  */
-const staticMiddleware = express.static(path.join(__dirname, '../..'));
+// Calculate static file directory
+// __dirname = backend/src/ (where this file is)
+// Go up two levels: backend/src/ -> backend/ -> repo root
+const staticDir = path.join(__dirname, '../..');
+
+// Also check if we're running from backend/ directory (process.cwd() after cd backend)
+// In that case, go up one level from cwd
+const cwdBasedDir = process.cwd().endsWith('backend') 
+    ? path.join(process.cwd(), '..')
+    : process.cwd();
+
+// Use the directory that contains index.html
+const finalStaticDir = fs.existsSync(path.join(staticDir, 'index.html')) 
+    ? staticDir 
+    : (fs.existsSync(path.join(cwdBasedDir, 'index.html')) ? cwdBasedDir : staticDir);
+
+console.log('Static files directory:', finalStaticDir);
+console.log('__dirname:', __dirname);
+console.log('Process cwd:', process.cwd());
+console.log('index.html exists:', fs.existsSync(path.join(finalStaticDir, 'index.html')));
+
+const staticMiddleware = express.static(finalStaticDir, {
+    index: 'index.html', // Serve index.html for /
+    extensions: ['html', 'js', 'css', 'png', 'jpg', 'gif', 'svg', 'ico', 'mp3']
+});
+
 app.use((req, res, next) => {
     // Skip static file serving for API routes
     if (req.path.startsWith('/api')) {
