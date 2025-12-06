@@ -632,13 +632,53 @@ const staticMiddleware = express.static(finalStaticDir, {
     maxAge: 0 // Disable caching for development
 });
 
+// Add a test endpoint to check file existence
+app.get('/test-static', (req, res) => {
+    const testFiles = ['index.html', 'api-client.js', 'game.js', 'auth.html'];
+    const results = {};
+    testFiles.forEach(file => {
+        const filePath = path.join(finalStaticDir, file);
+        results[file] = {
+            exists: fs.existsSync(filePath),
+            path: filePath
+        };
+    });
+    res.json({
+        staticDir: finalStaticDir,
+        __dirname: __dirname,
+        cwd: process.cwd(),
+        files: results
+    });
+});
+
 app.use((req, res, next) => {
     // Skip static file serving for API routes
     if (req.path.startsWith('/api')) {
         return next();
     }
+    
+    // Log static file requests for debugging
+    if (req.path.endsWith('.js') || req.path.endsWith('.html') || req.path.endsWith('.css')) {
+        const filePath = path.join(finalStaticDir, req.path);
+        console.log(`Static file request: ${req.path} -> ${filePath} (exists: ${fs.existsSync(filePath)})`);
+    }
+    
     // Use express.static for non-API paths
-    staticMiddleware(req, res, next);
+    staticMiddleware(req, res, (err) => {
+        if (err) {
+            console.error('Static middleware error:', err);
+        }
+        // If static middleware didn't serve the file, try direct file serving as fallback
+        if (!res.headersSent) {
+            const filePath = path.join(finalStaticDir, req.path);
+            if (fs.existsSync(filePath)) {
+                console.log(`Fallback: Serving ${req.path} directly from ${filePath}`);
+                res.sendFile(filePath);
+            } else {
+                next(); // Let 404 handler deal with it
+            }
+        }
+    });
 });
 
 /**
