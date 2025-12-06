@@ -601,20 +601,28 @@ app.get('/api/progress/leaderboard', async (req, res) => {
  * Skip /api paths to ensure API routes are handled first
  */
 // Calculate static file directory
-// __dirname = backend/src/ (where this file is)
-// Go up two levels: backend/src/ -> backend/ -> repo root
-const staticDir = path.join(__dirname, '../..');
+// We may be deployed from a monorepo where the server runs in /backend,
+// so probe several candidate roots until we find index.html and api-client.js.
+const candidateRoots = [
+    path.join(__dirname, '../..'),          // repo root when running from backend/src
+    path.join(process.cwd(), '..'),         // if process cwd is /backend
+    path.join(process.cwd(), '.'),          // if process cwd is already repo root
+    path.join(__dirname, '../public')       // optional backend/public copy
+].filter((dir, idx, arr) => arr.indexOf(dir) === idx); // unique
 
-// Also check if we're running from backend/ directory (process.cwd() after cd backend)
-// In that case, go up one level from cwd
-const cwdBasedDir = process.cwd().endsWith('backend') 
-    ? path.join(process.cwd(), '..')
-    : process.cwd();
+const pickStaticDir = () => {
+    for (const dir of candidateRoots) {
+        const hasIndex = fs.existsSync(path.join(dir, 'index.html'));
+        const hasApiClient = fs.existsSync(path.join(dir, 'api-client.js'));
+        if (hasIndex && hasApiClient) {
+            return dir;
+        }
+    }
+    // Fallback to first candidate
+    return candidateRoots[0];
+};
 
-// Use the directory that contains index.html
-const finalStaticDir = fs.existsSync(path.join(staticDir, 'index.html')) 
-    ? staticDir 
-    : (fs.existsSync(path.join(cwdBasedDir, 'index.html')) ? cwdBasedDir : staticDir);
+const finalStaticDir = pickStaticDir();
 
 console.log('Static files directory:', finalStaticDir);
 console.log('__dirname:', __dirname);
@@ -634,7 +642,7 @@ const staticMiddleware = express.static(finalStaticDir, {
 
 // Add a test endpoint to check file existence
 app.get('/test-static', (req, res) => {
-    const testFiles = ['index.html', 'api-client.js', 'game.js', 'auth.html'];
+    const testFiles = ['index.html', 'api-client.js', 'game.js', 'auth.html', 'friends.html'];
     const results = {};
     testFiles.forEach(file => {
         const filePath = path.join(finalStaticDir, file);
