@@ -320,9 +320,12 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
  */
 app.get('/api/auth/check-email/:email', async (req, res) => {
     try {
-        const exists = await emailExists(req.params.email);
+        const email = decodeURIComponent(req.params.email);
+        console.log(`Checking email availability: ${email}`);
+        const exists = await emailExists(email);
         res.json({ available: !exists });
     } catch (error) {
+        console.error('Error checking email:', error);
         res.status(500).json({ error: 'Failed to check email' });
     }
 });
@@ -333,9 +336,12 @@ app.get('/api/auth/check-email/:email', async (req, res) => {
  */
 app.get('/api/auth/check-nickname/:nickname', async (req, res) => {
     try {
-        const exists = await nicknameExists(req.params.nickname);
+        const nickname = decodeURIComponent(req.params.nickname);
+        console.log(`Checking nickname availability: ${nickname}`);
+        const exists = await nicknameExists(nickname);
         res.json({ available: !exists });
     } catch (error) {
+        console.error('Error checking nickname:', error);
         res.status(500).json({ error: 'Failed to check nickname' });
     }
 });
@@ -591,8 +597,17 @@ app.get('/api/progress/leaderboard', async (req, res) => {
 /**
  * Serve static files from parent directory (the game files)
  * This must be AFTER all API routes to prevent API requests from being served as static files
+ * Skip /api paths to ensure API routes are handled first
  */
-app.use(express.static(path.join(__dirname, '../..')));
+const staticMiddleware = express.static(path.join(__dirname, '../..'));
+app.use((req, res, next) => {
+    // Skip static file serving for API routes
+    if (req.path.startsWith('/api')) {
+        return next();
+    }
+    // Use express.static for non-API paths
+    staticMiddleware(req, res, next);
+});
 
 /**
  * 404 handler
