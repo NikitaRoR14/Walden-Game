@@ -620,10 +620,16 @@ console.log('Static files directory:', finalStaticDir);
 console.log('__dirname:', __dirname);
 console.log('Process cwd:', process.cwd());
 console.log('index.html exists:', fs.existsSync(path.join(finalStaticDir, 'index.html')));
+console.log('api-client.js exists:', fs.existsSync(path.join(finalStaticDir, 'api-client.js')));
+console.log('game.js exists:', fs.existsSync(path.join(finalStaticDir, 'game.js')));
 
 const staticMiddleware = express.static(finalStaticDir, {
     index: 'index.html', // Serve index.html for /
-    extensions: ['html', 'js', 'css', 'png', 'jpg', 'gif', 'svg', 'ico', 'mp3']
+    extensions: ['html', 'js', 'css', 'png', 'jpg', 'gif', 'svg', 'ico', 'mp3'],
+    dotfiles: 'ignore',
+    etag: true,
+    lastModified: true,
+    maxAge: 0 // Disable caching for development
 });
 
 app.use((req, res, next) => {
