@@ -40,11 +40,27 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+// CORS configuration - allow requests from frontend
+const corsOptions = {
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Serve static files from parent directory (the game files)
 app.use(express.static(path.join(__dirname, '../..')));
+
+// Root health check endpoint (for monitoring)
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
 
 // Request logging
 app.use((req, res, next) => {
@@ -593,15 +609,19 @@ app.use((err, req, res, next) => {
 /**
  * Start server
  */
-app.listen(PORT, () => {
+// Listen on all interfaces (0.0.0.0) for hosting platforms
+app.listen(PORT, '0.0.0.0', () => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const host = isProduction ? 'your-domain.com' : `localhost:${PORT}`;
     console.log(`
 ╔═══════════════════════════════════════════════╗
 ║   Walden Game - Full Stack Server            ║
 ║                                               ║
-║   🎮 Game: http://localhost:${PORT}                ║
-║   📡 API:  http://localhost:${PORT}/api            ║
+║   🎮 Game: http://${host.padEnd(35)}║
+║   📡 API:  http://${host}/api${' '.repeat(Math.max(0, 35 - host.length - 8))}║
 ║                                               ║
 ║   Frontend + Backend running together! ✨     ║
+║   Environment: ${(process.env.NODE_ENV || 'development').padEnd(25)}║
 ╚═══════════════════════════════════════════════╝
     `);
 });

@@ -3,7 +3,21 @@
  * Handles communication with the leaderboard server and authentication
  */
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// Auto-detect API URL based on environment
+// In production, assumes backend is served from same domain
+const API_BASE_URL = (() => {
+    if (typeof window !== 'undefined') {
+        // Browser environment
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:3000/api';
+        }
+        // Production: use same domain (backend serves frontend)
+        return `${window.location.protocol}//${window.location.host}/api`;
+    }
+    // Node.js environment (if needed)
+    return process.env.API_BASE_URL || 'http://localhost:3000/api';
+})();
 
 /**
  * Get authentication token from localStorage
