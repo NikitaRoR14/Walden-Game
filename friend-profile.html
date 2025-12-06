@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player Profile</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="friends.css">
+  <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+  <canvas id="friends-bg" class="friends-bg"></canvas>
+  <div class="friends-hero">
+    <div class="friends-hero__content">
+      <div>
+        <div class="pill">Profile</div>
+        <h1 id="player-name">Player</h1>
+        <p class="lede" id="player-meta"></p>
+      </div>
+      <div class="hero-actions">
+        <button id="back-to-friends" class="main-button">← Back to Friends</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="friends-page">
+    <section class="card friends-stats" id="profile-stats"></section>
+
+    <section class="card">
+      <header class="section-header">
+        <div>
+          <h2>Highlights</h2>
+          <p>Fish, legacies, and story status</p>
+        </div>
+      </header>
+      <div id="progress-body" class="list"></div>
+    </section>
+
+    <section class="two-col">
+      <div class="card">
+        <header class="section-header">
+          <h2>Fish Collection</h2>
+          <p>Recent catches</p>
+        </header>
+        <div id="fish-list" class="list"></div>
+      </div>
+      <div class="card">
+        <header class="section-header">
+          <h2>Legacies</h2>
+          <p>Unlocked insights</p>
+        </header>
+        <div id="legacy-list" class="list"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="status-text"></div>
+
+  <script src="api-client.js"></script>
+  <script src="friends-page.js"></script>
+  <script src="friend-profile.js"></script>
+</body>
+</html>

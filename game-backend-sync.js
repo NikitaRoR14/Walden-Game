@@ -29,34 +29,35 @@ if (!isAuthenticated()) {
 function startPlayTimeTracking() {
     playTimeStart = Date.now();
     
-    // Update play time every 30 seconds
+    // Update play time every 10 seconds (more frequent, more reliable)
     playTimeInterval = setInterval(async () => {
-        const currentTime = Date.now();
-        const secondsPlayed = Math.floor((currentTime - playTimeStart) / 1000);
-        
-        if (secondsPlayed >= 30) {
-            await updatePlayTime(secondsPlayed);
-            playTimeStart = Date.now();
-            console.log(`✓ Play time synced: ${secondsPlayed}s`);
-        }
-    }, 30000);
+        await flushPlayTime();
+    }, 10000);
     
-    // Also sync on page unload
-    window.addEventListener('beforeunload', async () => {
-        const currentTime = Date.now();
-        const secondsPlayed = Math.floor((currentTime - playTimeStart) / 1000);
-        
-        if (secondsPlayed > 0) {
-            // Use sendBeacon for reliable sending during page unload
-            const data = JSON.stringify({ seconds: secondsPlayed });
-            const token = getAuthToken();
-            
-            navigator.sendBeacon(
-                'http://localhost:3000/api/progress/play-time',
-                new Blob([data], { type: 'application/json' })
-            );
-        }
+    // Sync on tab hide/unload
+    const syncAndReset = () => flushPlayTime();
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') syncAndReset();
     });
+    window.addEventListener('beforeunload', syncAndReset);
+}
+
+async function flushPlayTime() {
+    if (!playTimeStart) return;
+    const currentTime = Date.now();
+    const secondsPlayed = Math.floor((currentTime - playTimeStart) / 1000);
+    if (secondsPlayed <= 0) return;
+    try {
+        const res = await updatePlayTime(secondsPlayed);
+        if (res && res.success) {
+            console.log(`✓ Play time synced: +${secondsPlayed}s`);
+        } else {
+            console.warn('⚠ Play time sync failed response', res);
+        }
+    } catch (e) {
+        console.warn('⚠ Play time sync error', e);
+    }
+    playTimeStart = Date.now();
 }
 
 /**
@@ -66,8 +67,12 @@ async function syncFishCatch(fishId, fishName) {
     if (!isAuthenticated()) return;
 
     try {
-        await recordFish(fishId, fishName);
-        console.log(`✓ Fish synced: ${fishName}`);
+        const res = await recordFish(fishId, fishName);
+        if (!res || !res.success) {
+            console.warn('⚠ Fish sync failed', res);
+        } else {
+            console.log(`✓ Fish synced: ${fishName}`);
+        }
     } catch (error) {
         console.error('Failed to sync fish:', error);
     }
@@ -80,8 +85,12 @@ async function syncLegacyUnlock(legacyName) {
     if (!isAuthenticated()) return;
 
     try {
-        await recordLegacy(legacyName);
-        console.log(`✓ Legacy synced: ${legacyName}`);
+        const res = await recordLegacy(legacyName);
+        if (!res || !res.success) {
+            console.warn('⚠ Legacy sync failed', res);
+        } else {
+            console.log(`✓ Legacy synced: ${legacyName}`);
+        }
     } catch (error) {
         console.error('Failed to sync legacy:', error);
     }
@@ -149,41 +158,48 @@ function displayUserInfo() {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: rgba(44, 62, 50, 0.9);
-            padding: 12px 20px;
-            border-radius: 10px;
-            border: 2px solid rgba(139, 115, 85, 0.4);
+            background: rgba(44, 62, 50, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            border-radius: 12px;
+            border: 2px solid rgba(200, 180, 150, 0.5);
             color: #e8dcc4;
             font-family: Georgia, serif;
-            z-index: 100;
+            z-index: 1000;
             display: flex;
             align-items: center;
             gap: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
             cursor: pointer;
             transition: all 0.3s ease;
+            animation: slideInFromRight 0.6s ease-out;
         `;
         
         userInfo.innerHTML = `
-            <span style="font-size: 1.5em;">${avatarEmojis[user.avatar] || '👤'}</span>
+            <span style="font-size: 2em;">${avatarEmojis[user.avatar] || '👤'}</span>
             <div>
                 <div style="font-weight: bold; font-size: 1.1em; cursor: pointer;" onclick="window.location.href='profile.html'" title="View Profile">${user.nickname}</div>
-                <div style="font-size: 0.8em; color: #c9b896; cursor: pointer;" onclick="logout()">Logout</div>
+                <div style="font-size: 0.8em; color: #c9b896; cursor: pointer;" onclick="if(confirm('Logout?')){localStorage.removeItem('authToken');localStorage.removeItem('userData');localStorage.removeItem('walden_auth_token');localStorage.removeItem('walden_user');location.href='auth.html';}">Logout</div>
             </div>
         `;
 
         userInfo.addEventListener('mouseenter', () => {
-            userInfo.style.transform = 'translateY(-2px)';
-            userInfo.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4)';
+            userInfo.style.transform = 'translateY(-3px) scale(1.05)';
+            userInfo.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+            userInfo.style.borderColor = 'rgba(220, 200, 170, 0.7)';
         });
 
         userInfo.addEventListener('mouseleave', () => {
-            userInfo.style.transform = 'translateY(0)';
-            userInfo.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3)';
+            userInfo.style.transform = 'translateY(0) scale(1)';
+            userInfo.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.4)';
+            userInfo.style.borderColor = 'rgba(200, 180, 150, 0.5)';
         });
 
         document.body.appendChild(userInfo);
     }
+    
+    // Make sure it's visible
+    userInfo.style.display = 'flex';
 }
 
 // Display user info when page loads

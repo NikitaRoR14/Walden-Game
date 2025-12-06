@@ -15,7 +15,9 @@ const {
     getUserById, 
     emailExists, 
     nicknameExists,
-    authenticateToken 
+    authenticateToken,
+    dbRun,
+    dbGet
 } = require('./auth');
 const {
     recordFishCaught,
@@ -25,6 +27,14 @@ const {
     updatePlayTime,
     getLeaderboardWithUsers
 } = require('./gameProgress');
+const {
+    subscribe: subscribeToUser,
+    unsubscribe: unsubscribeFromUser,
+    searchUsers,
+    getSubscriptions,
+    getFriends,
+    getUserByNickname
+} = require('./friends');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -215,7 +225,9 @@ app.post('/api/auth/register', [
                 id: user.id,
                 email: user.email,
                 nickname: user.nickname,
-                avatar: user.avatar
+                avatar: user.avatar,
+                created_at: user.created_at,
+                createdAt: user.created_at
             }
         });
 
@@ -261,9 +273,9 @@ app.post('/api/auth/login', [
  * Get current user profile
  * GET /api/auth/me
  */
-app.get('/api/auth/me', authenticateToken, (req, res) => {
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try {
-        const user = getUserById(req.user.id);
+        const user = await getUserById(req.user.id);
         
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
@@ -276,7 +288,9 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
                 email: user.email,
                 nickname: user.nickname,
                 avatar: user.avatar,
+                created_at: user.created_at,
                 createdAt: user.created_at,
+                last_login: user.last_login,
                 lastLogin: user.last_login
             }
         });
@@ -310,6 +324,106 @@ app.get('/api/auth/check-nickname/:nickname', async (req, res) => {
         res.json({ available: !exists });
     } catch (error) {
         res.status(500).json({ error: 'Failed to check nickname' });
+    }
+});
+
+/**
+ * Friend & subscription endpoints
+ */
+
+// Search users by nickname
+app.get('/api/friends/search', authenticateToken, async (req, res) => {
+    try {
+        const { nickname } = req.query;
+        if (!nickname || nickname.trim().length < 2) {
+            return res.status(400).json({ error: 'Please provide at least 2 characters' });
+        }
+
+        const results = await searchUsers(nickname.trim(), req.user.id);
+        res.json({ success: true, results });
+    } catch (error) {
+        console.error('Error searching users:', error);
+        res.status(500).json({ error: 'Failed to search users' });
+    }
+});
+
+// Subscribe to a user by nickname
+app.post('/api/friends/subscribe', authenticateToken, async (req, res) => {
+    try {
+        const { nickname } = req.body;
+        if (!nickname) {
+            return res.status(400).json({ error: 'Nickname is required' });
+        }
+
+        const target = await subscribeToUser(req.user.id, nickname.trim());
+        const mutual = await dbGet(
+            `SELECT 1 FROM user_subscriptions WHERE user_id = ? AND target_user_id = ?`,
+            [target.id, req.user.id]
+        ).catch(() => null);
+
+        res.json({
+            success: true,
+            subscribedTo: target.nickname,
+            targetId: target.id,
+            mutual: !!mutual
+        });
+    } catch (error) {
+        console.error('Error subscribing to user:', error);
+        res.status(400).json({ error: error.message || 'Failed to subscribe' });
+    }
+});
+
+// Unsubscribe (optional cleanup)
+app.delete('/api/friends/subscribe', authenticateToken, async (req, res) => {
+    try {
+        const { targetId } = req.body;
+        if (!targetId) {
+            return res.status(400).json({ error: 'targetId is required' });
+        }
+        await unsubscribeFromUser(req.user.id, targetId);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error unsubscribing:', error);
+        res.status(500).json({ error: 'Failed to unsubscribe' });
+    }
+});
+
+// Get subscriptions and friends
+app.get('/api/friends', authenticateToken, async (req, res) => {
+    try {
+        const [friends, subscriptions] = await Promise.all([
+            getFriends(req.user.id),
+            getSubscriptions(req.user.id)
+        ]);
+        res.json({ success: true, friends, subscriptions });
+    } catch (error) {
+        console.error('Error fetching friends:', error);
+        res.status(500).json({ error: 'Failed to load friends' });
+    }
+});
+
+// Get a user's public profile (basic + progress) by nickname
+app.get('/api/profile/:nickname', authenticateToken, async (req, res) => {
+    try {
+        const target = await getUserByNickname(req.params.nickname);
+        if (!target) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const progress = await getUserProgress(target.id);
+        res.json({
+            success: true,
+            user: {
+                id: target.id,
+                nickname: target.nickname,
+                avatar: target.avatar,
+                createdAt: target.created_at,
+                lastLogin: target.last_login
+            },
+            progress
+        });
+    } catch (error) {
+        console.error('Error fetching profile by nickname:', error);
+        res.status(500).json({ error: 'Failed to load profile' });
     }
 });
 
@@ -397,7 +511,7 @@ app.get('/api/progress', authenticateToken, async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching progress:', error);
-        res.status(500).json({ error: 'Failed to fetch progress' });
+        res.status(500).json({ error: 'Failed to fetch progress', details: error.message });
     }
 });
 
@@ -408,12 +522,28 @@ app.get('/api/progress', authenticateToken, async (req, res) => {
 app.post('/api/progress/play-time', authenticateToken, async (req, res) => {
     try {
         const { seconds } = req.body;
+        const secs = Number(seconds);
 
-        if (!seconds || seconds < 0) {
+        if (!Number.isFinite(secs) || secs <= 0) {
             return res.status(400).json({ error: 'Valid seconds required' });
         }
 
-        await updatePlayTime(req.user.id, seconds);
+        try {
+            await updatePlayTime(req.user.id, Math.floor(secs));
+        } catch (err) {
+            // Fallback: if column missing, migrate then retry
+            if (err.message && err.message.includes('play_time_minutes')) {
+                try {
+                    await dbRun(`ALTER TABLE user_progress ADD COLUMN play_time_minutes INTEGER DEFAULT 0`);
+                    await updatePlayTime(req.user.id, Math.floor(secs));
+                } catch (e2) {
+                    console.error('Migration failed in /progress/play-time:', e2);
+                    throw e2;
+                }
+            } else {
+                throw err;
+            }
+        }
 
         res.json({
             success: true,
@@ -422,7 +552,7 @@ app.post('/api/progress/play-time', authenticateToken, async (req, res) => {
 
     } catch (error) {
         console.error('Error updating play time:', error);
-        res.status(500).json({ error: 'Failed to update play time' });
+        res.status(500).json({ error: 'Failed to update play time', details: error.message });
     }
 });
 
@@ -475,4 +605,3 @@ app.listen(PORT, () => {
 ╚═══════════════════════════════════════════════╝
     `);
 });
-

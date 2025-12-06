@@ -93,11 +93,18 @@ async function registerUser(email, password, nickname, avatar) {
             [email.toLowerCase(), passwordHash, nickname, avatar]
         );
 
+        // Fetch the freshly created user so created_at is included in responses
+        const user = await getUserById(result.lastID);
+
         return {
-            id: result.lastID,
-            email: email.toLowerCase(),
-            nickname,
-            avatar
+            id: user.id,
+            email: user.email,
+            nickname: user.nickname,
+            avatar: user.avatar,
+            created_at: user.created_at,
+            createdAt: user.created_at,
+            last_login: user.last_login,
+            lastLogin: user.last_login
         };
     } catch (error) {
         if (error.message.includes('UNIQUE constraint failed: users.email')) {
@@ -149,7 +156,11 @@ async function loginUser(email, password) {
             id: user.id,
             email: user.email,
             nickname: user.nickname,
-            avatar: user.avatar
+            avatar: user.avatar,
+            created_at: user.created_at,
+            createdAt: user.created_at,
+            last_login: user.last_login,
+            lastLogin: user.last_login
         }
     };
 }
@@ -227,4 +238,3 @@ module.exports = {
     dbGet,
     dbAll
 };
-

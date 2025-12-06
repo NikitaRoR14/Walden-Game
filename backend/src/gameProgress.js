@@ -18,10 +18,14 @@ async function initProgressTables() {
             total_legacies INTEGER DEFAULT 0,
             story_completed BOOLEAN DEFAULT 0,
             play_time_seconds INTEGER DEFAULT 0,
+            play_time_minutes INTEGER DEFAULT 0,
             last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
         `);
+        
+        // Ensure required columns exist (migrations)
+        await ensureColumns();
 
         // Fish caught by users
         await dbRun(`
@@ -153,36 +157,65 @@ async function getUserLegacies(userId) {
  * Get user's complete progress
  */
 async function getUserProgress(userId) {
-    let progress = await dbGet(
-        `SELECT * FROM user_progress WHERE user_id = ?`,
-        [userId]
-    );
+    try {
+        // Ensure base row exists
+        await ensureUserProgressExists(userId);
 
-    // If no progress entry exists, create one
-    if (!progress) {
-        await dbRun(
-            `INSERT INTO user_progress (user_id, play_time_seconds) VALUES (?, 0)`,
-            [userId]
-        );
-        progress = {
-            user_id: userId,
-            total_fish_caught: 0,
-            total_legacies: 0,
-            story_completed: 0,
-            play_time_seconds: 0
+        let progress;
+        try {
+            progress = await dbGet(
+                `SELECT user_id, total_fish_caught, total_legacies, story_completed, play_time_seconds, 
+                        COALESCE(play_time_minutes, floor(play_time_seconds/60)) AS play_time_minutes,
+                        last_updated
+                 FROM user_progress WHERE user_id = ?`,
+                [userId]
+            );
+        } catch (err) {
+            // If column missing, migrate then retry
+            if (err.message && err.message.includes('no such column: play_time_minutes')) {
+                try {
+                    await dbRun(`ALTER TABLE user_progress ADD COLUMN play_time_minutes INTEGER DEFAULT 0`);
+                } catch (e) {
+                    // ignore if already exists
+                }
+                progress = await dbGet(
+                    `SELECT user_id, total_fish_caught, total_legacies, story_completed, play_time_seconds, 
+                            COALESCE(play_time_minutes, floor(play_time_seconds/60)) AS play_time_minutes,
+                            last_updated
+                     FROM user_progress WHERE user_id = ?`,
+                    [userId]
+                );
+            } else {
+                throw err;
+            }
+        }
+
+        if (!progress) {
+            progress = {
+                user_id: userId,
+                total_fish_caught: 0,
+                total_legacies: 0,
+                story_completed: 0,
+                play_time_seconds: 0,
+                play_time_minutes: 0,
+                last_updated: null
+            };
+        }
+
+        const fish = await getUserFish(userId);
+        const legacies = await getUserLegacies(userId);
+
+        return {
+            ...progress,
+            fish_collection: fish,
+            legacies_unlocked: legacies,
+            unique_fish_count: fish.length,
+            total_legacies_count: legacies.length
         };
+    } catch (error) {
+        console.error('Error in getUserProgress:', error);
+        throw error;
     }
-
-    const fish = await getUserFish(userId);
-    const legacies = await getUserLegacies(userId);
-
-    return {
-        ...progress,
-        fish_collection: fish,
-        legacies_unlocked: legacies,
-        unique_fish_count: fish.length,
-        total_legacies_count: legacies.length
-    };
 }
 
 /**
@@ -207,10 +240,12 @@ async function updateTotalFishCaught(userId) {
  * Ensure user_progress entry exists
  */
 async function ensureUserProgressExists(userId) {
+    await ensureColumns();
     const exists = await dbGet('SELECT user_id FROM user_progress WHERE user_id = ?', [userId]);
     if (!exists) {
         await dbRun(
-            `INSERT INTO user_progress (user_id, play_time_seconds) VALUES (?, 0)`,
+            `INSERT INTO user_progress (user_id, total_fish_caught, total_legacies, story_completed, play_time_seconds, play_time_minutes) 
+             VALUES (?, 0, 0, 0, 0, 0)`,
             [userId]
         );
     }
@@ -237,17 +272,67 @@ async function updateTotalLegacies(userId) {
 /**
  * Update play time
  */
+async function ensureColumns() {
+    try {
+        await dbRun(`ALTER TABLE user_progress ADD COLUMN play_time_seconds INTEGER DEFAULT 0`);
+    } catch (e) {
+        // ignore if exists
+    }
+    try {
+        await dbRun(`ALTER TABLE user_progress ADD COLUMN play_time_minutes INTEGER DEFAULT 0`);
+    } catch (e) {
+        // ignore if exists
+    }
+}
+
 async function updatePlayTime(userId, secondsToAdd) {
+    // Normalize input
+    secondsToAdd = Math.max(0, Math.floor(Number(secondsToAdd) || 0));
+    if (!secondsToAdd) return;
+    
     // Ensure user_progress exists
     await ensureUserProgressExists(userId);
     
-    await dbRun(
-        `UPDATE user_progress 
-        SET play_time_seconds = COALESCE(play_time_seconds, 0) + ?,
-            last_updated = CURRENT_TIMESTAMP
-        WHERE user_id = ?`,
-        [secondsToAdd, userId]
-    );
+    const doUpdate = async () => {
+        const currentProgress = await dbGet(
+            `SELECT play_time_seconds, 
+                    COALESCE(play_time_minutes, floor(play_time_seconds/60)) AS play_time_minutes 
+             FROM user_progress WHERE user_id = ?`,
+            [userId]
+        );
+        
+        const currentSeconds = currentProgress?.play_time_seconds || 0;
+        const newSeconds = currentSeconds + secondsToAdd;
+        const newMinutes = Math.floor(newSeconds / 60);
+        
+        await dbRun(
+            `UPDATE user_progress 
+            SET play_time_seconds = ?,
+                play_time_minutes = ?,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE user_id = ?`,
+            [newSeconds, newMinutes, userId]
+        );
+        
+        console.log(`✓ Updated play time: +${secondsToAdd}s (Total: ${newSeconds}s / ${newMinutes}m)`);
+    };
+
+    try {
+        await doUpdate();
+    } catch (err) {
+        // If column missing, migrate and retry once
+        if (err.message && err.message.includes('no such column: play_time_minutes')) {
+            try {
+                await dbRun(`ALTER TABLE user_progress ADD COLUMN play_time_minutes INTEGER DEFAULT 0`);
+                await doUpdate();
+            } catch (e) {
+                console.error('Migration failed while updating play time:', e);
+                throw e;
+            }
+        } else {
+            throw err;
+        }
+    }
 }
 
 /**
@@ -261,7 +346,8 @@ async function getLeaderboardWithUsers() {
             user_progress.total_fish_caught,
             user_progress.total_legacies,
             user_progress.story_completed,
-            user_progress.play_time_seconds
+            user_progress.play_time_seconds,
+            user_progress.play_time_minutes
         FROM user_progress
         JOIN users ON user_progress.user_id = users.id
         ORDER BY user_progress.total_legacies DESC, user_progress.total_fish_caught DESC

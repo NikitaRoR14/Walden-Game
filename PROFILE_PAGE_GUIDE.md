@@ -229,7 +229,7 @@ Future potential features:
 **Direct link**: http://localhost:8080/profile.html
 
 *"I went to the woods because I wished to live deliberately..."*  
-— See how deliberately you're living at **Your Walden Profile** 🌲
+- See how deliberately you're living at **Your Walden Profile** 🌲
 
 ---
 

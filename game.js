@@ -1,3 +1,19 @@
+// Polyfill for roundRect (not supported in all browsers)
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, width, height, radius) {
+        if (width < 2 * radius) radius = width / 2;
+        if (height < 2 * radius) radius = height / 2;
+        this.beginPath();
+        this.moveTo(x + radius, y);
+        this.arcTo(x + width, y, x + width, y + height, radius);
+        this.arcTo(x + width, y + height, x, y + height, radius);
+        this.arcTo(x, y + height, x, y, radius);
+        this.arcTo(x, y, x + width, y, radius);
+        this.closePath();
+        return this;
+    };
+}
+
 // Game State
 const gameState = {
     mode: 'menu', // 'menu', 'story', 'freeplay'
@@ -8,6 +24,7 @@ const gameState = {
     isFishing: false,
     canFish: true,
     escapeMenuOpen: false,
+    isHoldingBar: false, // For fishing minigame bar control
     settings: {
         musicVolume: 0.5,
         sfxVolume: 0.5,
@@ -21,18 +38,33 @@ const gameState = {
     fishingMinigame: {
         active: false,
         progress: 0,
-        barPosition: 0.5,
-        fishPosition: 0.5,
-        fishVelocity: 0,
-        barSize: 0.3,
+        fishPosition: 50, // 0-100, position on track
+        barPosition: 50, // 0-100, position of green bar
+        barSize: 25, // percentage of track height (smaller for challenge)
+        barVelocity: 0, // for smooth movement
+        fishVelocity: 0, // fish movement speed
+        fishTarget: 50, // where fish wants to go
+        fishBehavior: 'steady', // steady, erratic, jumpy, slow
+        behaviorTimer: 0,
         difficulty: 1,
-        currentFish: null
+        currentFish: null,
+        combo: 0,
+        comboTimer: 0,
+        perfectCatchWindow: 0
     },
     collection: {
         caught: new Set(),
         totalSpecies: 8
+    },
+    social: {
+        friends: [],
+        subscriptions: []
     }
 };
+
+// Cached layout for procedural scene placement
+let sceneLayout = null;
+let shoreCache = null;
 
 // Fish species based on Thoreau's life and works
 const fishSpecies = [
@@ -338,7 +370,7 @@ const legacyConnections = {
     },
     'Individual Path': {
         location: 'Hearts Everywhere',
-        text: 'Your final lesson—that you had other lives to live—freed countless people to change course. You proved it\'s never too late to advance confidently toward one\'s dreams.'
+        text: 'Your final lesson-that you had other lives to live-freed countless people to change course. You proved it\'s never too late to advance confidently toward one\'s dreams.'
     }
 };
 
@@ -375,6 +407,13 @@ const cabinClickArea = {
     height: 0
 };
 
+const catCanClickArea = {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0
+};
+
 // Animation frame
 let lastTime = 0;
 let gameLoopRunning = false;
@@ -383,6 +422,7 @@ let gameLoopRunning = false;
 const soundManager = {
     sounds: {},
     music: null,
+    catMusic: null,
     initialized: false,
     
     init() {
@@ -414,6 +454,8 @@ const soundManager = {
         
         // Background music
         this.music = this.createSound('assets/sounds/background_music.mp3', 0.3, true);
+        // Biography special track (cats easter egg)
+        this.catMusic = this.createSound('assets/sounds/cat_theme.mp3', 0.35, true);
         
         this.initialized = true;
     },
@@ -454,6 +496,21 @@ const soundManager = {
             // Auto-play might be blocked, will play after user interaction
         });
     },
+
+    playCatMusic() {
+        if (!this.catMusic) return;
+        this.stopMusic();
+        this.catMusic.volume = this.catMusic.defaultVolume * gameState.settings.musicVolume;
+        this.catMusic.play().catch(() => {});
+    },
+    
+    stopCatMusic() {
+        if (this.catMusic) {
+            this.catMusic.pause();
+            this.catMusic.currentTime = 0;
+        }
+        this.playMusic();
+    },
     
     stopMusic() {
         if (this.music) {
@@ -465,6 +522,9 @@ const soundManager = {
     updateMusicVolume() {
         if (this.music) {
             this.music.volume = this.music.defaultVolume * gameState.settings.musicVolume;
+        }
+        if (this.catMusic) {
+            this.catMusic.volume = this.catMusic.defaultVolume * gameState.settings.musicVolume;
         }
     },
     
@@ -502,14 +562,53 @@ const soundManager = {
     }
 };
 
+// Check authentication before allowing game access
+function checkAuthentication() {
+    const token = localStorage.getItem('authToken');
+    
+    if (!token) {
+        // No token - redirect to auth page
+        window.location.href = 'auth.html';
+        return false;
+    }
+    
+    // Verify token is valid (check if it's expired or malformed)
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expirationTime = payload.exp * 1000; // Convert to milliseconds
+        
+        if (Date.now() >= expirationTime) {
+            // Token expired - clear and redirect
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userData');
+            window.location.href = 'auth.html';
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        // Invalid token format - clear and redirect
+        console.error('Invalid token:', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+        window.location.href = 'auth.html';
+        return false;
+    }
+}
+
 // Initialize game
 function init() {
+    // Check authentication first
+    if (!checkAuthentication()) {
+        return; // Stop initialization if not authenticated
+    }
+    
     canvas = document.getElementById('game-canvas');
     ctx = canvas.getContext('2d');
     
-    // Set canvas size
-    canvas.width = 1000;
-    canvas.height = 600;
+    // Set canvas size to full window
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
     
     // Initialize sound system
     soundManager.init();
@@ -530,12 +629,14 @@ function init() {
     addButtonSound('freeplay-mode-btn', startFreePlayMode);
     addButtonSound('view-collection-btn', viewCollection);
     addButtonSound('view-profile-btn', () => window.location.href = 'profile.html');
+    addButtonSound('friends-menu-btn', () => window.location.href = 'friends.html');
     addButtonSound('login-btn', () => window.location.href = 'auth.html');
     addButtonSound('signup-btn', () => window.location.href = 'auth.html');
     addButtonSound('back-to-menu-btn', backToMenu);
     addButtonSound('restart-btn', restartGame);
     addButtonSound('resume-btn', resumeGame);
     addButtonSound('settings-btn', openSettings);
+    addButtonSound('fullscreen-btn', toggleFullscreen);
     addButtonSound('main-menu-btn', returnToMainMenu);
     addButtonSound('close-settings-btn', closeSettings);
     
@@ -565,9 +666,13 @@ function init() {
             gameState.settings.showTutorial = e.target.checked;
         });
     }
+
+    // Friends/social UI
+    setupFriendsUI();
     
     // Keyboard controls
     document.addEventListener('keydown', handleKeyPress);
+    document.addEventListener('keyup', handleKeyRelease);
     
     // Canvas click/touch handlers
     canvas.addEventListener('click', handleCanvasClick);
@@ -602,6 +707,25 @@ function init() {
     if (closeCabinInfoBtn) {
         closeCabinInfoBtn.addEventListener('click', closeCabinInfo);
     }
+
+    const catConfirmClose = document.getElementById('close-cat-confirm');
+    if (catConfirmClose) {
+        catConfirmClose.addEventListener('click', closeCatConfirm);
+    }
+
+    const catConfirmOpenPage = document.getElementById('cat-confirm-open-page');
+    if (catConfirmOpenPage) {
+        catConfirmOpenPage.addEventListener('click', () => {
+            closeCatConfirm();
+            soundManager.playCatMusic();
+            openCatPage();
+        });
+    }
+    
+    // Display user profile button if logged in
+    if (typeof displayUserInfo === 'function') {
+        displayUserInfo();
+    }
     
     // Initialize particles
     createParticles();
@@ -623,6 +747,15 @@ function handleCanvasClick(e) {
     const canvasX = x * scaleX;
     const canvasY = y * scaleY;
     
+    // Check cat can first (sits near Thoreau)
+    if (canvasX >= catCanClickArea.x &&
+        canvasX <= catCanClickArea.x + catCanClickArea.width &&
+        canvasY >= catCanClickArea.y &&
+        canvasY <= catCanClickArea.y + catCanClickArea.height) {
+        openCatConfirm();
+        return;
+    }
+
     // Check if click is on Thoreau
     if (canvasX >= thoreauClickArea.x && 
         canvasX <= thoreauClickArea.x + thoreauClickArea.width &&
@@ -678,8 +811,13 @@ function handleCanvasHover(e) {
         canvasX <= cabinClickArea.x + cabinClickArea.width &&
         canvasY >= cabinClickArea.y && 
         canvasY <= cabinClickArea.y + cabinClickArea.height;
+
+    const overCatCan = canvasX >= catCanClickArea.x &&
+        canvasX <= catCanClickArea.x + catCanClickArea.width &&
+        canvasY >= catCanClickArea.y &&
+        canvasY <= catCanClickArea.y + catCanClickArea.height;
     
-    if (overThoreau || overEmerson || overCabin) {
+    if (overThoreau || overEmerson || overCabin || overCatCan) {
         canvas.style.cursor = 'pointer';
     } else {
         canvas.style.cursor = 'default';
@@ -688,11 +826,13 @@ function handleCanvasHover(e) {
 
 function openBiography() {
     soundManager.play('dialogOpen');
+   // soundManager.playCatMusic();
     document.getElementById('biography-popup').classList.remove('hidden');
 }
 
 function closeBiography() {
     soundManager.play('menuClose');
+  //  soundManager.stopCatMusic();
     document.getElementById('biography-popup').classList.add('hidden');
 }
 
@@ -716,6 +856,26 @@ function closeCabinInfo() {
     document.getElementById('cabin-info-popup').classList.add('hidden');
 }
 
+function openCatConfirm() {
+    const modal = document.getElementById('cat-confirm-popup');
+    if (modal) {
+        modal.classList.remove('hidden');
+        soundManager.play('menuOpen');
+    }
+}
+
+function closeCatConfirm() {
+    const modal = document.getElementById('cat-confirm-popup');
+    if (modal) {
+        modal.classList.add('hidden');
+        soundManager.play('menuClose');
+    }
+}
+
+function openCatPage() {
+    window.location.href = 'thoreau-cats.html';
+}
+
 function showMainMenu() {
     // Reset escape menu state
     gameState.escapeMenuOpen = false;
@@ -733,6 +893,11 @@ function showMainMenu() {
         const element = document.getElementById(screenId);
         if (element) {
             element.classList.remove('active');
+            if (screenId === 'main-menu') {
+                element.style.display = 'flex';
+            } else {
+                element.style.display = 'none';
+            }
         }
     });
     
@@ -754,6 +919,14 @@ function showMainMenu() {
         initMenuParticles();
     }
     
+    // Display user info if logged in
+    if (typeof displayUserInfo === 'function') {
+        displayUserInfo();
+    }
+    
+    // Restore menu-only chrome (friends toggle, logout pill)
+    setInGameChromeVisibility(true);
+    
     gameState.mode = 'menu';
 }
 
@@ -762,20 +935,36 @@ function hideMainMenu() {
     if (typeof stopMenuParticles === 'function') {
         stopMenuParticles();
     }
+    const mainMenu = document.getElementById('main-menu');
+    if (mainMenu) {
+        mainMenu.classList.remove('active');
+        mainMenu.style.display = 'none';
+    }
 }
 
 function startStoryMode() {
+    // Ensure other overlays are hidden
+    hideCollectionScreen();
+    
     hideMainMenu();
     gameState.mode = 'story';
     resetGameState();
     document.getElementById('main-menu').classList.remove('active');
-    document.getElementById('game-screen').classList.add('active');
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) {
+        gameScreen.classList.add('active');
+        gameScreen.style.display = 'flex'; // override any inline display:none
+    }
+    
+    // Ensure canvas is properly sized
+    resizeCanvas();
     
     // Show status bar for story mode
     const statusBar = document.getElementById('status-bar');
     if (statusBar) {
         statusBar.style.display = 'flex';
     }
+    setInGameChromeVisibility(false);
     
     // Start music and ambient sounds
     soundManager.playMusic();
@@ -789,17 +978,28 @@ function startStoryMode() {
 }
 
 function startFreePlayMode() {
+    // Ensure other overlays are hidden
+    hideCollectionScreen();
+    
     hideMainMenu();
     gameState.mode = 'freeplay';
     resetGameState();
     document.getElementById('main-menu').classList.remove('active');
-    document.getElementById('game-screen').classList.add('active');
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) {
+        gameScreen.classList.add('active');
+        gameScreen.style.display = 'flex'; // override any inline display:none
+    }
+    
+    // Ensure canvas is properly sized
+    resizeCanvas();
     
     // Hide legacies counter in free play
     const statusBar = document.getElementById('status-bar');
     if (statusBar) {
         statusBar.style.display = 'none';
     }
+    setInGameChromeVisibility(false);
     
     // Start music and ambient sounds
     soundManager.playMusic();
@@ -820,6 +1020,18 @@ function backToMenu() {
     showMainMenu();
 }
 
+// Show/hide UI chrome that should not appear during gameplay (friends toggle, logout/user pill)
+function setInGameChromeVisibility(showMenuChrome) {
+    const friendsToggle = document.getElementById('friends-toggle');
+    if (friendsToggle) {
+        friendsToggle.style.display = showMenuChrome ? 'inline-flex' : 'none';
+    }
+    const userInfo = document.getElementById('user-info-display');
+    if (userInfo) {
+        userInfo.style.display = showMenuChrome ? 'flex' : 'none';
+    }
+}
+
 function resetGameState() {
     gameState.phase = 0;
     gameState.fishCaught = 0;
@@ -836,12 +1048,14 @@ function resetGameState() {
     gameState.fishingMinigame = {
         active: false,
         progress: 0,
-        barPosition: 0.5,
-        fishPosition: 0.5,
-        fishVelocity: 0,
-        barSize: 0.3,
+        tension: 0,
+        fishDirection: '↑',
+        playerDirection: null,
+        directionChangeTimer: 0,
+        reelCooldown: 0,
         difficulty: 1,
-        currentFish: null
+        currentFish: null,
+        lineBroken: false
     };
     
     // Reset global variables
@@ -882,16 +1096,33 @@ function handleKeyPress(e) {
         return;
     }
     
-    if (e.code === 'Space' && gameState.canFish && !gameState.isFishing) {
+    if ((e.code === 'KeyF' || e.key === 'f' || e.key === 'F') && gameState.canFish && !gameState.isFishing) {
         e.preventDefault();
         startFishing();
     }
     
-    // Fishing minigame controls
+    // Bar fishing minigame controls (Space to raise bar)
     if (gameState.fishingMinigame.active) {
-        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        if (e.code === 'Space' || e.key === ' ') {
             e.preventDefault();
-            gameState.fishingMinigame.barPosition = Math.max(0, gameState.fishingMinigame.barPosition - 0.15);
+            gameState.isHoldingBar = true;
+            return; // Stop event from propagating
+        }
+    }
+    
+    // Prevent space from doing anything else in the game
+    if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        return; // Block all other space bar actions
+    }
+}
+
+function handleKeyRelease(e) {
+    // Release bar control
+    if (gameState.fishingMinigame.active) {
+        if (e.code === 'Space' || e.key === ' ') {
+            e.preventDefault();
+            gameState.isHoldingBar = false;
         }
     }
 }
@@ -987,27 +1218,315 @@ function closeSettings() {
     document.getElementById('escape-menu').classList.remove('hidden');
 }
 
-// Add mouse/touch control for fishing minigame
-let isHoldingBar = false;
+// Fullscreen toggle
+function toggleFullscreen() {
+    soundManager.play('buttonClick');
+    
+    if (!document.fullscreenElement) {
+        // Enter fullscreen
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+            elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) {
+            elem.msRequestFullscreen();
+        }
+    } else {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
+}
 
+// Friends / social UI
+function setupFriendsUI() {
+    const toggleBtn = document.getElementById('friends-toggle');
+    const panel = document.getElementById('friends-panel');
+    const closeBtn = document.getElementById('friends-close');
+    const searchInput = document.getElementById('friend-search-input');
+    const searchBtn = document.getElementById('friend-search-btn');
+    const statusEl = document.getElementById('friend-search-status');
+
+    if (!toggleBtn || !panel) return;
+
+    const setStatus = (text, tone = 'muted') => {
+        if (!statusEl) return;
+        statusEl.textContent = text || '';
+        statusEl.style.color = tone === 'error' ? '#f7b2a5' : '#c9d5d1';
+    };
+
+    const openPanel = () => {
+        soundManager.play('menuOpen');
+        panel.classList.remove('hidden');
+        fetchAndRenderSocial();
+    };
+
+    const closePanel = () => {
+        soundManager.play('menuClose');
+        panel.classList.add('hidden');
+    };
+
+    toggleBtn.addEventListener('click', () => {
+        if (panel.classList.contains('hidden')) {
+            openPanel();
+        } else {
+            closePanel();
+        }
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+    const renderList = (targetId, items, emptyText) => {
+        const container = document.getElementById(targetId);
+        if (!container) return;
+        if (!items || !items.length) {
+            container.innerHTML = `<div class="friend-stats">${emptyText}</div>`;
+            return;
+        }
+
+        container.innerHTML = items.map(user => {
+            const avatar = getAvatarGlyph(user.avatar, user.nickname);
+            const stats = `${user.totalFishCaught || 0} fish • ${user.totalLegacies || 0} legacies`;
+            const badge = user.isFriend ? '<span class="friend-pill">Friend</span>' : '';
+            return `
+                <div class="friend-card">
+                    <div class="friend-meta">
+                        <div class="friend-avatar">${avatar}</div>
+                        <div>
+                            <div class="friend-name">${user.nickname}</div>
+                            <div class="friend-stats">${stats}</div>
+                        </div>
+                    </div>
+                    ${badge}
+                </div>`;
+        }).join('');
+    };
+
+    const renderSearchResults = (results) => {
+        const container = document.getElementById('friend-search-results');
+        if (!container) return;
+        if (!results || !results.length) {
+            container.innerHTML = '<div class="friend-stats">No players found. Try a different nickname.</div>';
+            return;
+        }
+        container.innerHTML = '';
+        results.forEach(user => {
+            const card = document.createElement('div');
+            card.className = 'friend-card';
+            const avatar = getAvatarGlyph(user.avatar, user.nickname);
+            const stats = `${user.totalFishCaught || 0} fish • ${user.totalLegacies || 0} legacies`;
+            const mutual = !!user.subscribesToMe && !!user.isSubscribed;
+
+            const actionState = mutual ? 'Friends' : (user.isSubscribed ? 'Subscribed' : 'Subscribe');
+            const disabled = actionState !== 'Subscribe';
+
+            card.innerHTML = `
+                <div class="friend-meta">
+                    <div class="friend-avatar">${avatar}</div>
+                    <div>
+                        <div class="friend-name">${user.nickname}</div>
+                        <div class="friend-stats">${stats}</div>
+                        ${mutual ? '<span class="friend-pill">Friend</span>' : (user.subscribesToMe ? '<span class="friend-pill">Follows you</span>' : '')}
+                    </div>
+                </div>
+            `;
+
+            const btn = document.createElement('button');
+            btn.className = 'friend-action';
+            btn.textContent = actionState;
+            btn.disabled = disabled;
+
+            btn.addEventListener('click', async () => {
+                try {
+                    btn.disabled = true;
+                    btn.textContent = '...';
+                    const resp = await subscribeToUser(user.nickname);
+                    if (!resp.success && resp.error) {
+                        setStatus(resp.error, 'error');
+                    } else {
+                        setStatus('Subscribed');
+                        await fetchAndRenderSocial();
+                        await performSearch();
+                    }
+                } catch (err) {
+                    console.error('Subscribe failed', err);
+                    setStatus('Could not subscribe', 'error');
+                }
+            });
+
+            card.appendChild(btn);
+            container.appendChild(card);
+        });
+    };
+
+    const performSearch = async () => {
+        const term = (searchInput?.value || '').trim();
+        if (term.length < 2) {
+            setStatus('Type at least 2 characters to search');
+            return;
+        }
+        setStatus('Searching...');
+        try {
+            const result = await searchUsersByNickname(term);
+            if (result.error) {
+                setStatus(result.error, 'error');
+                return;
+            }
+            renderSearchResults(result.results || []);
+            setStatus('');
+        } catch (err) {
+            console.error('Search failed', err);
+            setStatus('Search failed', 'error');
+        }
+    };
+
+    const fetchAndRenderSocial = async () => {
+        try {
+            const res = await fetchFriendsAndSubscriptions();
+            if (!res || res.error) {
+                setStatus(res?.error || 'Unable to load friends', 'error');
+                return;
+            }
+            gameState.social.friends = res.friends || [];
+            gameState.social.subscriptions = res.subscriptions || [];
+
+            document.getElementById('friends-count').textContent = gameState.social.friends.length;
+            document.getElementById('subscriptions-count').textContent = gameState.social.subscriptions.length;
+
+            // Mark mutual flag for friends list
+            const friends = gameState.social.friends.map(f => ({ ...f, isFriend: true }));
+            renderList('friends-list', friends, 'No friends yet. Mutual subscriptions will appear here.');
+
+            const subs = gameState.social.subscriptions.map(s => ({ ...s, isFriend: !!s.isFriend }));
+            renderList('subscriptions-list', subs, 'You have not subscribed to anyone yet.');
+        } catch (err) {
+            console.error('Error loading social data', err);
+            setStatus('Unable to load social data', 'error');
+        }
+    };
+
+    if (searchBtn) searchBtn.addEventListener('click', performSearch);
+    if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+    }
+
+    // Initial load to populate counters
+    fetchAndRenderSocial();
+}
+
+function getAvatarGlyph(avatar, nickname) {
+    if (avatarEmojis && avatarEmojis[avatar]) return avatarEmojis[avatar];
+    return (nickname || '?').charAt(0).toUpperCase();
+}
+
+// Update fullscreen button text
+document.addEventListener('fullscreenchange', updateFullscreenButton);
+document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+document.addEventListener('msfullscreenchange', updateFullscreenButton);
+
+function updateFullscreenButton() {
+    const fullscreenText = document.getElementById('fullscreen-text');
+    if (fullscreenText) {
+        if (document.fullscreenElement) {
+            fullscreenText.textContent = 'Exit Fullscreen';
+        } else {
+            fullscreenText.textContent = 'Enter Fullscreen';
+        }
+    }
+    
+    // Resize canvas when entering/exiting fullscreen
+    resizeCanvas();
+}
+
+// Canvas resize handler with proper aspect ratio
+function resizeCanvas() {
+    if (!canvas) return;
+    
+    // Use a 16:10 aspect ratio (like 1600x1000) for nice widescreen gameplay
+    const targetAspect = 16 / 10;
+    const windowAspect = window.innerWidth / window.innerHeight;
+    
+    if (windowAspect > targetAspect) {
+        // Window is wider - use height
+        canvas.height = window.innerHeight;
+        canvas.width = canvas.height * targetAspect;
+    } else {
+        // Window is taller - use width
+        canvas.width = window.innerWidth;
+        canvas.height = canvas.width / targetAspect;
+    }
+
+    // Regenerate procedural scene layout for the new size
+    sceneLayout = null;
+    shoreCache = null;
+    generateSceneLayout();
+
+    // Update click areas for interactive elements
+    updateClickAreas();
+}
+
+function updateClickAreas() {
+    // Update Thoreau click area
+    thoreauClickArea.x = canvas.width * 0.15;
+    thoreauClickArea.y = canvas.height * 0.35;
+    thoreauClickArea.width = canvas.width * 0.12;
+    thoreauClickArea.height = canvas.height * 0.4;
+    
+    // Update Emerson click area
+    emersonClickArea.x = canvas.width * 0.7;
+    emersonClickArea.y = canvas.height * 0.35;
+    emersonClickArea.width = canvas.width * 0.12;
+    emersonClickArea.height = canvas.height * 0.4;
+    
+    // Update cabin click area
+    cabinClickArea.x = canvas.width * 0.05;
+    cabinClickArea.y = canvas.height * 0.25;
+    cabinClickArea.width = canvas.width * 0.15;
+    cabinClickArea.height = canvas.height * 0.25;
+}
+
+// Enhanced fishing minigame with new mechanics
+const fishingDirections = ['↑', '↓', '←', '→'];
+const directionKeys = {
+    'w': '↑', 'W': '↑', 'KeyW': '↑', 'ArrowUp': '↑',
+    's': '↓', 'S': '↓', 'KeyS': '↓', 'ArrowDown': '↓',
+    'a': '←', 'A': '←', 'KeyA': '←', 'ArrowLeft': '←',
+    'd': '→', 'D': '→', 'KeyD': '→', 'ArrowRight': '→'
+};
+
+// Track player input
+let playerDirection = null;
+let canReel = false;
+
+// Old fishing control (deprecated but kept for compatibility)
 document.addEventListener('mousedown', (e) => {
     if (gameState.fishingMinigame.active) {
-        isHoldingBar = true;
+        gameState.isHoldingBar = true;
     }
 });
 
 document.addEventListener('mouseup', (e) => {
-    isHoldingBar = false;
+    gameState.isHoldingBar = false;
 });
 
 document.addEventListener('touchstart', (e) => {
     if (gameState.fishingMinigame.active && !e.target.closest('.close-bio-btn')) {
-        isHoldingBar = true;
+        gameState.isHoldingBar = true;
     }
 }, { passive: true });
 
 document.addEventListener('touchend', (e) => {
-    isHoldingBar = false;
+    gameState.isHoldingBar = false;
 }, { passive: true });
 
 function startFishing() {
@@ -1055,15 +1574,178 @@ function startFishingMinigame() {
         gameState.fishingMinigame.currentFish = availableFish[Math.floor(Math.random() * availableFish.length)];
     }
     
-    gameState.fishingMinigame.active = true;
-    gameState.fishingMinigame.progress = 0;
-    gameState.fishingMinigame.barPosition = 0.5;
-    gameState.fishingMinigame.fishPosition = Math.random() * 0.6 + 0.2;
-    gameState.fishingMinigame.fishVelocity = (Math.random() - 0.5) * 0.015; // Reduced from 0.02
-    gameState.fishingMinigame.barSize = 0.3; // Increased from 0.25
-    gameState.fishingMinigame.startTime = Date.now();
+    // Initialize fishing minigame with bar mechanics
+    const minigame = gameState.fishingMinigame;
+    minigame.active = true;
+    minigame.progress = 0;
+    minigame.fishPosition = 50;
+    minigame.barPosition = 50;
+    minigame.barVelocity = 0;
+    minigame.fishVelocity = 0;
+    minigame.fishTarget = 50;
+    minigame.fishBehavior = chooseFishBehavior();
+    minigame.behaviorTimer = 120 + Math.floor(Math.random() * 180); // 2-5 seconds
+    minigame.combo = 0;
+    minigame.comboTimer = 0;
+    minigame.perfectCatchWindow = 0;
+    
+    // Set default difficulty and bar size
+    minigame.difficulty = 1;
+    minigame.barSize = 25; // Smaller bar for more challenge
+    
+    // Adjust difficulty based on fish rarity (if in free play mode)
+    if (minigame.currentFish) {
+        switch(minigame.currentFish.rarity) {
+            case 'legendary':
+                minigame.difficulty = 2.5;
+                minigame.barSize = 18; // Very small for legendary
+                break;
+            case 'rare':
+                minigame.difficulty = 2;
+                minigame.barSize = 22;
+                break;
+            case 'uncommon':
+                minigame.difficulty = 1.5;
+                minigame.barSize = 25;
+                break;
+            default:
+                minigame.difficulty = 1;
+                minigame.barSize = 28; // Slightly bigger for common
+        }
+    }
+    
+    gameState.isHoldingBar = false;
     
     document.getElementById('fishing-minigame').classList.remove('hidden');
+    
+    // Update fish name display
+    const fishNameDisplay = document.getElementById('fish-name-display');
+    if (fishNameDisplay && minigame.currentFish) {
+        fishNameDisplay.textContent = `Catching ${minigame.currentFish.name}...`;
+    }
+    
+    soundManager.play('fishBite');
+    updateBehaviorHint();
+}
+
+// Choose fish behavior pattern
+function chooseFishBehavior() {
+    const behaviors = ['steady', 'erratic', 'jumpy', 'slow'];
+    return behaviors[Math.floor(Math.random() * behaviors.length)];
+}
+
+// Update the behavior hint text
+function updateBehaviorHint() {
+    const hint = document.getElementById('behavior-hint');
+    if (!hint) return;
+    
+    const behavior = gameState.fishingMinigame.fishBehavior;
+    const hints = {
+        steady: 'Moves smoothly and predictably',
+        erratic: 'Darts around unpredictably!',
+        jumpy: 'Makes sudden movements!',
+        slow: 'Moves leisurely and calmly'
+    };
+    
+    hint.textContent = hints[behavior] || 'Watch its movements...';
+}
+
+// Lightweight deterministic random generator for layout composition
+function createPRNG(seed) {
+    return function() {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+    };
+}
+
+// Generate a grounded layout for trees, reeds, lily pads, and shoreline details
+function generateSceneLayout() {
+    if (!canvas) return;
+    const rng = createPRNG(Math.floor(canvas.width * 7 + canvas.height * 13));
+    const scale = canvas.height / 600;
+    const waterline = canvas.height * 0.65;
+
+    // Lily pads cluster into quiet coves, leaving the dock side clear
+    const lilyPads = [];
+    const lilyClusters = [
+        { center: canvas.width * 0.2, count: 3, spread: 55 * scale },
+        { center: canvas.width * 0.46, count: 2, spread: 45 * scale },
+        { center: canvas.width * 0.72, count: 3, spread: 60 * scale }
+    ];
+    lilyClusters.forEach(cluster => {
+        for (let i = 0; i < cluster.count; i++) {
+            const jitterX = (rng() - 0.5) * cluster.spread;
+            const jitterY = (rng() - 0.5) * 18 * scale;
+            const size = (16 + rng() * 10) * scale;
+            lilyPads.push({
+                x: cluster.center + jitterX,
+                y: waterline + 60 * scale + jitterY,
+                size
+            });
+        }
+    });
+
+    // Reeds group near shallows and bay edges
+    const reeds = [];
+    const reedAnchors = [0.16, 0.3, 0.56, 0.74, 0.9];
+    reedAnchors.forEach(anchor => {
+        const baseX = canvas.width * anchor + (rng() - 0.5) * 30 * scale;
+        const clusterHeights = [36 + rng() * 12, 42 + rng() * 12, 34 + rng() * 12];
+        reeds.push({ x: baseX, heights: clusterHeights });
+    });
+
+    // Tree bands frame the cabin and dock, mixing pines and oaks for maturity
+    const trees = [];
+    const treeBands = [
+        { start: 0.08, end: 0.3, count: 4, primary: 'pine' },
+        { start: 0.34, end: 0.52, count: 3, primary: 'oak' },
+        { start: 0.6, end: 0.9, count: 4, primary: 'pine' }
+    ];
+    treeBands.forEach(band => {
+        for (let i = 0; i < band.count; i++) {
+            const t = band.start + rng() * (band.end - band.start);
+            const mixed = rng();
+            let type = band.primary;
+            if (band.primary === 'pine' && mixed > 0.55) type = 'oak';
+            if (band.primary === 'oak' && mixed > 0.65) type = 'pine';
+            const scaleMod = type === 'pine' ? 1.05 : 1;
+            trees.push({
+                x: canvas.width * t,
+                scale: (0.72 + rng() * 0.3) * scaleMod,
+                type
+            });
+        }
+    });
+    trees.sort((a, b) => a.x - b.x);
+
+    // Shoreline detail: pebbles and tufts in the walking path leading to the dock
+    const shoreDetails = { pebbles: [], tufts: [] };
+    const shoreStart = canvas.width * 0.55;
+    const shoreWidth = canvas.width * 0.42;
+    for (let i = 0; i < 55; i++) {
+        shoreDetails.pebbles.push({
+            x: shoreStart + rng() * shoreWidth,
+            y: waterline - 12 * scale + rng() * canvas.height * 0.06,
+            size: (1 + rng() * 2) * scale,
+            color: rng() > 0.5 ? '#2a3a1a' : '#3a4a2a'
+        });
+    }
+    for (let i = 0; i < 16; i++) {
+        shoreDetails.tufts.push({
+            x: shoreStart + rng() * shoreWidth,
+            y: waterline - 8 * scale + rng() * canvas.height * 0.05,
+            width: (10 + rng() * 12) * scale,
+            height: (12 + rng() * 10) * scale
+        });
+    }
+
+    sceneLayout = { lilyPads, reeds, trees, shoreDetails };
+    // Reset auxiliary shoreline caches (grass/flowers) now that sizing changed
+    shoreCache = null;
+}
+
+function ensureSceneLayout() {
+    if (!sceneLayout) generateSceneLayout();
 }
 
 function updateFishingMinigame() {
@@ -1071,81 +1753,342 @@ function updateFishingMinigame() {
     
     const minigame = gameState.fishingMinigame;
     
-    // Fish AI - smoother, less erratic movement
-    minigame.fishVelocity += (Math.random() - 0.5) * 0.005; // Reduced from 0.008
-    minigame.fishVelocity *= 0.97; // Increased damping from 0.95
-    minigame.fishPosition += minigame.fishVelocity;
+    // Update fish AI behavior
+    updateFishAI(minigame);
     
-    // Keep fish in bounds
-    if (minigame.fishPosition < 0.1) {
-        minigame.fishPosition = 0.1;
-        minigame.fishVelocity *= -0.5;
-    }
-    if (minigame.fishPosition > 0.9) {
-        minigame.fishPosition = 0.9;
-        minigame.fishVelocity *= -0.5;
+    // Update bar position based on player input
+    updateBarPosition(minigame);
+    
+    // Check if fish is in the bar
+    const fishInBar = isFishInBar(minigame);
+    
+    // Debug logging (temporary - remove after testing)
+    if (Math.random() < 0.02) { // Log occasionally to avoid spam
+        console.log('Fish:', minigame.fishPosition.toFixed(1), 
+                    'Bar:', minigame.barPosition.toFixed(1), '-', (minigame.barPosition + minigame.barSize).toFixed(1),
+                    'InBar:', fishInBar,
+                    'Progress:', minigame.progress.toFixed(1));
     }
     
-    // Bar physics - smoother control
-    if (isHoldingBar) {
-        minigame.barPosition = Math.max(0, minigame.barPosition - 0.02); // Reduced from 0.03
+    // Update progress
+    if (fishInBar) {
+        // Fish is caught in bar - progress increases
+        const progressGain = 0.8 + (minigame.combo * 0.15); // Increased gain for faster catching
+        minigame.progress = Math.min(100, minigame.progress + progressGain);
+        
+        // Build combo
+        minigame.comboTimer++;
+        if (minigame.comboTimer > 30) { // 0.5 second in bar
+            minigame.combo++;
+            minigame.comboTimer = 0;
+            if (minigame.combo % 3 === 0) {
+                soundManager.play('success');
+            }
+        }
+        
+        // Always show combo display when fish is in bar
+        showComboIndicator(Math.max(1, minigame.combo));
+        
+        // Check for perfect catch (fish centered in bar)
+        const fishCenter = minigame.fishPosition;
+        const barCenter = minigame.barPosition + (minigame.barSize / 2);
+        const distance = Math.abs(fishCenter - barCenter);
+        
+        if (distance < 8) { // Very centered (increased tolerance)
+            minigame.perfectCatchWindow++;
+            if (minigame.perfectCatchWindow === 30) { // Half second of perfect
+                showQualityIndicator('Perfect!');
+                minigame.progress = Math.min(100, minigame.progress + 5); // Bonus
+                soundManager.play('success');
+            }
+        } else {
+            minigame.perfectCatchWindow = 0;
+        }
     } else {
-        minigame.barPosition = Math.min(1, minigame.barPosition + 0.018); // Reduced from 0.025
+        // Fish escaped bar - progress decreases slowly, combo resets
+        minigame.progress = Math.max(0, minigame.progress - 0.15);
+        if (minigame.combo > 0) {
+            minigame.combo = 0;
+            minigame.comboTimer = 0;
+            showComboIndicator(0); // Hide combo display
+        }
+        minigame.perfectCatchWindow = 0;
     }
-    
-    // Check if fish is in bar
-    const barTop = minigame.barPosition;
-    const barBottom = minigame.barPosition + minigame.barSize;
-    
-    if (minigame.fishPosition >= barTop && minigame.fishPosition <= barBottom) {
-        minigame.progress += 0.012; // Reduced from 0.02 to make it take longer
-    } else {
-        minigame.progress -= 0.006; // Reduced from 0.008 for slightly more challenge
-    }
-    
-    minigame.progress = Math.max(0, Math.min(1, minigame.progress));
     
     // Update UI
-    const progressBar = document.getElementById('catch-progress-fill');
-    const fishIcon = document.getElementById('fish-icon');
-    const barElement = document.getElementById('fishing-bar');
-    
-    if (progressBar) progressBar.style.height = `${minigame.progress * 100}%`;
-    if (fishIcon) {
-        fishIcon.style.top = `${minigame.fishPosition * 100}%`;
-        // Update fish emoji in free play mode
-        if (gameState.mode === 'freeplay' && minigame.currentFish) {
-            fishIcon.textContent = minigame.currentFish.emoji;
-        }
-    }
-    if (barElement) barElement.style.top = `${minigame.barPosition * 100}%`;
+    updateFishingUI();
     
     // Win condition
-    if (minigame.progress >= 1) {
-        endFishingMinigame(true);
-    }
-    
-    // Lose condition
-    if (minigame.progress <= 0 && Date.now() - minigame.startTime > 2000) {
-        // Give player a bit of time before they can fail
-        // Actually, let's make it forgiving - they can't fail
+    if (minigame.progress >= 100) {
+        // Calculate quality based on combo
+        const quality = minigame.combo > 10 ? 'perfect' : (minigame.combo > 5 ? 'great' : 'good');
+        endFishingMinigame(true, quality);
     }
 }
 
-function endFishingMinigame(success) {
+// Update fish AI movement
+function updateFishAI(minigame) {
+    // Update behavior timer
+    minigame.behaviorTimer--;
+    if (minigame.behaviorTimer <= 0) {
+        minigame.fishBehavior = chooseFishBehavior();
+        minigame.behaviorTimer = 120 + Math.floor(Math.random() * 180);
+        updateBehaviorHint();
+    }
+    
+    // Fish movement based on behavior
+    const behavior = minigame.fishBehavior;
+    const diff = minigame.difficulty;
+    
+    switch(behavior) {
+        case 'steady':
+            // Pick new target occasionally
+            if (Math.random() < 0.02 * diff) {
+                minigame.fishTarget = 20 + Math.random() * 60; // Stay in middle area mostly
+            }
+            // Move toward target smoothly
+            const steadyDiff = minigame.fishTarget - minigame.fishPosition;
+            minigame.fishVelocity += steadyDiff * 0.02 * diff;
+            break;
+            
+        case 'erratic':
+            // Sudden direction changes
+            if (Math.random() < 0.04 * diff) {
+                minigame.fishVelocity = (Math.random() - 0.5) * 10 * diff;
+            }
+            break;
+            
+        case 'jumpy':
+            // Sudden jumps to new positions
+            if (Math.random() < 0.03 * diff) {
+                minigame.fishTarget = 10 + Math.random() * 80;
+                const jumpDiff = minigame.fishTarget - minigame.fishPosition;
+                minigame.fishVelocity = jumpDiff * 0.2 * diff;
+            }
+            break;
+            
+        case 'slow':
+            // Very gradual movement
+            if (Math.random() < 0.015 * diff) {
+                minigame.fishTarget = 25 + Math.random() * 50;
+            }
+            const slowDiff = minigame.fishTarget - minigame.fishPosition;
+            minigame.fishVelocity += slowDiff * 0.008 * diff;
+            break;
+    }
+    
+    // Apply velocity damping
+    minigame.fishVelocity *= 0.90;
+    
+    // Clamp velocity
+    minigame.fishVelocity = Math.max(-4, Math.min(4, minigame.fishVelocity));
+    
+    // Update fish position
+    minigame.fishPosition += minigame.fishVelocity;
+    minigame.fishPosition = Math.max(0, Math.min(100, minigame.fishPosition));
+}
+
+// Update bar position based on player input
+function updateBarPosition(minigame) {
+    const maxPosition = 100 - minigame.barSize;
+    
+    if (gameState.isHoldingBar) {
+        // Bar rises when holding space - very slow and controlled
+        minigame.barVelocity -= 0.8;
+    } else {
+        // Bar falls due to gravity - very slow and controlled
+        minigame.barVelocity += 0.7;
+    }
+    
+    // Apply damping for smoother movement - very high for maximum smoothness
+    minigame.barVelocity *= 0.96;
+    
+    // Update position BEFORE clamping
+    minigame.barPosition += minigame.barVelocity;
+    
+    // Clamp position to valid range and reset velocity if hitting bounds
+    if (minigame.barPosition <= 0) {
+        minigame.barPosition = 0;
+        minigame.barVelocity = Math.max(0, minigame.barVelocity); // Only allow upward velocity
+    } else if (minigame.barPosition >= maxPosition) {
+        minigame.barPosition = maxPosition;
+        minigame.barVelocity = Math.min(0, minigame.barVelocity); // Only allow downward velocity
+    }
+    
+    // Final safety clamp
+    minigame.barPosition = Math.max(0, Math.min(maxPosition, minigame.barPosition));
+}
+
+// Check if fish is within the green bar
+function isFishInBar(minigame) {
+    const fishPos = minigame.fishPosition;
+    const barTop = minigame.barPosition;
+    const barBottom = minigame.barPosition + minigame.barSize;
+    
+    return fishPos >= barTop && fishPos <= barBottom;
+}
+
+// Show quality indicator (Perfect, Great, etc.)
+function showQualityIndicator(text) {
+    const indicator = document.getElementById('quality-indicator');
+    if (!indicator) return;
+    
+    const qualityText = indicator.querySelector('.quality-text');
+    if (qualityText) {
+        qualityText.textContent = text;
+    }
+    
+    indicator.classList.remove('show');
+    void indicator.offsetWidth; // Force reflow
+    indicator.classList.add('show');
+    
+    setTimeout(() => {
+        indicator.classList.remove('show');
+    }, 600);
+}
+
+// Show combo indicator
+function showComboIndicator(combo) {
+    const comboDisplay = document.getElementById('combo-display');
+    if (!comboDisplay) return;
+    
+    if (combo >= 1) {
+        comboDisplay.classList.add('active');
+        
+        // Pulse effect on combo increase
+        const comboCount = document.getElementById('combo-count');
+        if (comboCount) {
+            comboCount.style.animation = 'none';
+            setTimeout(() => {
+                comboCount.style.animation = 'comboCountPulse 0.5s ease-out';
+            }, 10);
+        }
+    } else {
+        comboDisplay.classList.remove('active');
+    }
+}
+
+function updateFishingUI() {
+    const minigame = gameState.fishingMinigame;
+    
+    // Ensure positions are valid before updating UI
+    const maxBarPosition = 100 - minigame.barSize;
+    minigame.barPosition = Math.max(0, Math.min(maxBarPosition, minigame.barPosition));
+    minigame.fishPosition = Math.max(0, Math.min(100, minigame.fishPosition));
+    
+    // Update fish position on track
+    const fishIcon = document.getElementById('fish-icon');
+    if (fishIcon) {
+        fishIcon.style.top = `${minigame.fishPosition}%`;
+    }
+    
+    // Update bar position on track
+    const bar = document.getElementById('fishing-bar');
+    if (bar) {
+        bar.style.top = `${minigame.barPosition}%`;
+        bar.style.height = `${minigame.barSize}%`;
+        
+        // Visual feedback when fish is in bar
+        const fishInBar = isFishInBar(minigame);
+        if (fishInBar) {
+            bar.style.borderColor = '#5fdc7f';
+            bar.style.boxShadow = '0 0 30px rgba(95, 220, 127, 1)';
+        } else {
+            bar.style.borderColor = '#ff6b6b';
+            bar.style.boxShadow = '0 0 20px rgba(255, 107, 107, 0.7)';
+        }
+    }
+    
+    // Update progress bar
+    const progressBar = document.getElementById('catch-progress-fill');
+    const progressPercent = document.getElementById('progress-percentage');
+    if (progressBar) {
+        progressBar.style.width = `${minigame.progress}%`;
+    }
+    if (progressPercent) {
+        progressPercent.textContent = `${Math.floor(minigame.progress)}%`;
+    }
+    
+    // Update combo display
+    const comboCount = document.getElementById('combo-count');
+    const comboBarFill = document.getElementById('combo-bar-fill');
+    if (comboCount) {
+        comboCount.textContent = minigame.combo;
+    }
+    if (comboBarFill) {
+        const comboProgress = Math.min(100, (minigame.comboTimer / 30) * 100);
+        comboBarFill.style.width = `${comboProgress}%`;
+    }
+    
+    // Update debug info
+    const debugFish = document.getElementById('debug-fish');
+    const debugBarStart = document.getElementById('debug-bar-start');
+    const debugBarEnd = document.getElementById('debug-bar-end');
+    const debugVelocity = document.getElementById('debug-velocity');
+    const debugInBar = document.getElementById('debug-in-bar');
+    const debugHolding = document.getElementById('debug-holding');
+    
+    if (debugFish) debugFish.textContent = minigame.fishPosition.toFixed(1);
+    if (debugBarStart) debugBarStart.textContent = minigame.barPosition.toFixed(1);
+    if (debugBarEnd) debugBarEnd.textContent = (minigame.barPosition + minigame.barSize).toFixed(1);
+    if (debugVelocity) debugVelocity.textContent = minigame.barVelocity.toFixed(2);
+    if (debugInBar) {
+        const fishInBar = isFishInBar(minigame);
+        debugInBar.textContent = fishInBar ? 'YES ✓' : 'NO ✗';
+        debugInBar.style.color = fishInBar ? '#5fdc7f' : '#ff6b6b';
+    }
+    if (debugHolding) {
+        debugHolding.textContent = gameState.isHoldingBar ? 'YES' : 'NO';
+        debugHolding.style.color = gameState.isHoldingBar ? '#5fdc7f' : '#ff6b6b';
+    }
+}
+
+function endFishingMinigame(success, quality = 'good') {
     gameState.fishingMinigame.active = false;
     document.getElementById('fishing-minigame').classList.add('hidden');
     
+    // Hide combo display
+    const comboDisplay = document.getElementById('combo-display');
+    if (comboDisplay) {
+        comboDisplay.classList.remove('active');
+    }
+    
+    // Reset fishing minigame state completely
+    gameState.fishingMinigame.progress = 0;
+    gameState.fishingMinigame.fishPosition = 50;
+    gameState.fishingMinigame.barPosition = 50;
+    gameState.fishingMinigame.barVelocity = 0;
+    gameState.fishingMinigame.fishVelocity = 0;
+    gameState.fishingMinigame.combo = 0;
+    gameState.fishingMinigame.comboTimer = 0;
+    gameState.fishingMinigame.perfectCatchWindow = 0;
+    gameState.isHoldingBar = false;
+    
     if (success) {
         soundManager.play('fishCaught');
+        
+        // Show quality message
+        if (quality === 'perfect') {
+            showQualityIndicator('Perfect Catch!');
+        } else if (quality === 'great') {
+            showQualityIndicator('Great Catch!');
+        }
+        
         setTimeout(() => {
             catchFish();
         }, 500);
     } else {
+        // Failed catch
+        soundManager.play('waterSplash');
+        
         // Reset for another try
         gameState.isFishing = false;
         fishingLine = null;
-        enableFishing();
+        bobber = null;
+        
+        setTimeout(() => {
+            enableFishing();
+        }, 500);
     }
 }
 
@@ -1392,30 +2335,84 @@ function enableFishing() {
     document.getElementById('fishing-prompt').classList.remove('hidden');
 }
 
-function showCollectionScreen() {
-    document.getElementById('main-menu').classList.remove('active');
-    document.getElementById('collection-screen').classList.add('active');
+async function showCollectionScreen() {
+    if (typeof isAuthenticated === 'function' && !isAuthenticated()) {
+        window.location.href = 'auth.html';
+        return;
+    }
+
+    // Stop menu particles when leaving main menu
+    if (typeof stopMenuParticles === 'function') {
+        stopMenuParticles();
+    }
+    // Hide main menu
+    const mainMenu = document.getElementById('main-menu');
+    if (mainMenu) {
+        mainMenu.classList.remove('active');
+        mainMenu.style.display = 'none';
+    }
+    
+    // Hide game screen
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) gameScreen.classList.remove('active');
+    
+    // Show collection screen
+    const collectionScreen = document.getElementById('collection-screen');
+    if (collectionScreen) {
+        collectionScreen.classList.add('active');
+        collectionScreen.style.display = 'flex';
+    }
     
     const grid = document.getElementById('collection-grid');
-    grid.innerHTML = '';
-    
-    fishSpecies.forEach(fish => {
-        const isCaught = gameState.collection.caught.has(fish.id);
-        const card = document.createElement('div');
-        card.className = `fish-card ${isCaught ? 'caught' : 'locked'} rarity-${fish.rarity}`;
-        
-        card.innerHTML = `
-            <div class="fish-emoji">${isCaught ? fish.emoji : '❓'}</div>
-            <div class="fish-name">${isCaught ? fish.name : '???'}</div>
-            <div class="fish-rarity">${fish.rarity.toUpperCase()}</div>
-            ${isCaught ? `<div class="fish-desc">${fish.description}</div>` : '<div class="fish-desc">Catch this fish to unlock!</div>'}
-        `;
-        
-        grid.appendChild(card);
-    });
-    
     const counter = document.getElementById('collection-counter');
-    counter.textContent = `${gameState.collection.caught.size} / ${fishSpecies.length} species collected`;
+    if (!grid || !counter) return;
+    
+    grid.innerHTML = '<div class="friend-stats">Loading your collection...</div>';
+    
+    try {
+        const res = await getUserProgress();
+        if (!res || !res.success || !res.progress) {
+            throw new Error(res?.error || 'Could not load progress');
+        }
+
+        const progress = res.progress;
+        const caughtSet = new Set((progress.fish_collection || []).map(f => f.fish_id));
+        gameState.collection.caught = caughtSet;
+
+        grid.innerHTML = '';
+        fishSpecies.forEach(fish => {
+            const record = (progress.fish_collection || []).find(f => f.fish_id === fish.id);
+            const isCaught = !!record;
+            const card = document.createElement('div');
+            card.className = `fish-card ${isCaught ? 'caught' : 'locked'} rarity-${fish.rarity}`;
+
+            const desc = isCaught
+                ? `${fish.description}<br><span style="color:#c9b896">Caught ${record.times_caught}× • First: ${new Date(record.first_caught).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>`
+                : 'Catch this fish to unlock!';
+
+            card.innerHTML = `
+                <div class="fish-emoji">${isCaught ? fish.emoji : '❓'}</div>
+                <div class="fish-name">${isCaught ? fish.name : '???'}</div>
+                <div class="fish-rarity">${fish.rarity.toUpperCase()}</div>
+                <div class="fish-desc">${desc}</div>
+            `;
+            grid.appendChild(card);
+        });
+
+        counter.textContent = `${progress.unique_fish_count || caughtSet.size} / ${fishSpecies.length} species collected`;
+    } catch (err) {
+        console.error('Failed to load collection from backend:', err);
+        grid.innerHTML = '<div class="friend-stats">Unable to load your collection. Please ensure you are logged in and try again.</div>';
+        counter.textContent = `0 / ${fishSpecies.length} species collected`;
+    }
+}
+
+function hideCollectionScreen() {
+    const collectionScreen = document.getElementById('collection-screen');
+    if (collectionScreen) {
+        collectionScreen.classList.remove('active');
+        collectionScreen.style.display = 'none';
+    }
 }
 
 function showEnding() {
@@ -1499,39 +2496,55 @@ function gameLoop(timestamp = 0) {
 }
 
 function renderScene() {
+    ensureSceneLayout();
     const brightness = gameState.atmosphere.brightness;
     const fog = gameState.atmosphere.fog;
     const time = Date.now() / 10000;
+    const scale = canvas.height / 600;
     
-    // Sky gradient - more natural colors with depth
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
-    skyGradient.addColorStop(0, adjustBrightness('#5a7fa5', brightness));
-    skyGradient.addColorStop(0.3, adjustBrightness('#7a9fb5', brightness));
-    skyGradient.addColorStop(0.7, adjustBrightness('#9fbfd8', brightness));
-    skyGradient.addColorStop(1, adjustBrightness('#c5dfe8', brightness));
+    // Enhanced sky with atmospheric scattering
+    const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.65);
+    skyGradient.addColorStop(0, adjustBrightness('#4a6f95', brightness));
+    skyGradient.addColorStop(0.15, adjustBrightness('#5a7fa5', brightness));
+    skyGradient.addColorStop(0.35, adjustBrightness('#7a9fb5', brightness));
+    skyGradient.addColorStop(0.6, adjustBrightness('#9fbfd8', brightness));
+    skyGradient.addColorStop(0.85, adjustBrightness('#c5dfe8', brightness));
+    skyGradient.addColorStop(1, adjustBrightness('#d5e8f0', brightness));
     ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.65);
     
-    // Add subtle clouds
-    drawClouds();
+    // Sun with enhanced rays and glow
+    const sunX = canvas.width * 0.78;
+    const sunY = canvas.height * 0.18;
+    const sunSize = 40 * Math.min(brightness, 1.2) * scale;
     
-    // Sun with glow
-    const sunX = canvas.width * 0.8;
-    const sunY = canvas.height * 0.15;
-    const sunSize = 35 * Math.min(brightness, 1.2);
+    // Subtle sun glow (no rotating rays for calm atmosphere)
     
-    // Sun glow
-    if (brightness > 0.9) {
-        const glowGradient = ctx.createRadialGradient(sunX, sunY, sunSize * 0.5, sunX, sunY, sunSize * 3);
-        glowGradient.addColorStop(0, `rgba(255, 220, 100, ${0.3 * brightness})`);
-        glowGradient.addColorStop(1, 'rgba(255, 220, 100, 0)');
-        ctx.fillStyle = glowGradient;
-        ctx.fillRect(sunX - sunSize * 3, sunY - sunSize * 3, sunSize * 6, sunSize * 6);
+    // Sun outer glow
+    if (brightness > 0.8) {
+        const outerGlow = ctx.createRadialGradient(sunX, sunY, sunSize * 0.3, sunX, sunY, sunSize * 4);
+        outerGlow.addColorStop(0, `rgba(255, 230, 120, ${0.25 * brightness})`);
+        outerGlow.addColorStop(0.4, `rgba(255, 220, 100, ${0.15 * brightness})`);
+        outerGlow.addColorStop(1, 'rgba(255, 220, 100, 0)');
+        ctx.fillStyle = outerGlow;
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, sunSize * 4, 0, Math.PI * 2);
+        ctx.fill();
     }
     
-    // Sun body
-    ctx.fillStyle = adjustBrightness('#ffd95a', brightness);
-    ctx.globalAlpha = Math.min(brightness * 0.9, 1);
+    // Sun inner glow
+    const innerGlow = ctx.createRadialGradient(sunX, sunY, sunSize * 0.5, sunX, sunY, sunSize * 1.8);
+    innerGlow.addColorStop(0, adjustBrightness('#fff9e0', brightness));
+    innerGlow.addColorStop(0.6, adjustBrightness('#ffd95a', brightness));
+    innerGlow.addColorStop(1, 'rgba(255, 217, 90, 0)');
+    ctx.fillStyle = innerGlow;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunSize * 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Sun body with corona
+    ctx.fillStyle = adjustBrightness('#fffae0', brightness);
+    ctx.globalAlpha = Math.min(brightness * 0.95, 1);
     ctx.beginPath();
     ctx.arc(sunX, sunY, sunSize, 0, Math.PI * 2);
     ctx.fill();
@@ -1549,24 +2562,39 @@ function renderScene() {
     // Trees (mid-ground)
     drawTrees();
     
-    // Pond-like water with radial gradient for depth
-    const centerX = canvas.width * 0.5;
-    const centerY = canvas.height * 0.82;
-    const waterGradient = ctx.createRadialGradient(centerX, centerY, 50, centerX, centerY, canvas.width * 0.8);
-    waterGradient.addColorStop(0, adjustBrightness('#2a4a5a', brightness));
-    waterGradient.addColorStop(0.4, adjustBrightness('#3a5a6a', brightness));
-    waterGradient.addColorStop(0.7, adjustBrightness('#2a4a5a', brightness));
-    waterGradient.addColorStop(1, adjustBrightness('#1a3a4a', brightness));
-    ctx.fillStyle = waterGradient;
-    ctx.fillRect(0, canvas.height * 0.65, canvas.width, canvas.height * 0.35);
+    // Pond-like water with layered gradients and rim light
+    const waterTop = canvas.height * 0.65;
+    const waterGrad = ctx.createLinearGradient(0, waterTop, 0, canvas.height);
+    waterGrad.addColorStop(0, adjustBrightness('#2d4f63', brightness));
+    waterGrad.addColorStop(0.45, adjustBrightness('#1f3c4f', brightness));
+    waterGrad.addColorStop(1, adjustBrightness('#142432', brightness));
+    ctx.fillStyle = waterGrad;
+    ctx.fillRect(0, waterTop, canvas.width, canvas.height - waterTop);
     
-    // Pond edge/shore reflections
-    ctx.globalAlpha = 0.1;
-    ctx.fillStyle = adjustBrightness('#4a5a4a', brightness);
-    ctx.beginPath();
-    ctx.ellipse(canvas.width * 0.5, canvas.height * 0.66, canvas.width * 0.45, 20, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    // Soft rim at shoreline
+    const rimGrad = ctx.createLinearGradient(0, waterTop - 8, 0, waterTop + 16);
+    rimGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
+    rimGrad.addColorStop(0.4, 'rgba(255,255,255,0.16)');
+    rimGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = rimGrad;
+    ctx.fillRect(0, waterTop - 8, canvas.width, 24);
+    
+    // Specular highlight on water
+    const sunReflectX = canvas.width * 0.72;
+    const sunReflectY = waterTop + 30;
+    const specGrad = ctx.createRadialGradient(
+        sunReflectX,
+        sunReflectY,
+        0,
+        sunReflectX,
+        sunReflectY,
+        canvas.width * 0.35
+    );
+    specGrad.addColorStop(0, 'rgba(255,255,255,0.08)');
+    specGrad.addColorStop(0.3, 'rgba(255,255,255,0.04)');
+    specGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = specGrad;
+    ctx.fillRect(0, waterTop, canvas.width, canvas.height - waterTop);
     
     // Water surface shimmer effect
     drawWaterShimmer();
@@ -1577,27 +2605,28 @@ function renderScene() {
     // Lily pads and water plants
     drawWaterPlants();
     
-    // Water sparkles
+    // Water sparkles - subtle and calm
     particles.forEach(particle => {
         if (particle.type === 'sparkle' && gameState.atmosphere.soundEnabled) {
-            const twinkle = Math.sin(Date.now() / 500 + particle.x) * 0.3 + 0.7;
-            ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha * twinkle})`;
+            const gentleTwinkle = Math.sin(Date.now() / 3000 + particle.x) * 0.15 + 0.85; // Much slower and subtler
+            ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha * gentleTwinkle * 0.6})`;
             ctx.beginPath();
             ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
             ctx.fill();
             
-            particle.y += particle.speedY;
+            // Very slow movement
+            particle.y += particle.speedY * 0.3;
             if (particle.y < canvas.height * 0.65 || particle.y > canvas.height) {
                 particle.y = canvas.height * 0.65 + Math.random() * (canvas.height * 0.35);
             }
         }
     });
     
-    // Birds
+    // Birds - slow, peaceful movement
     particles.forEach(particle => {
         if (particle.type === 'bird' && gameState.atmosphere.soundEnabled) {
             drawBird(particle.x, particle.y);
-            particle.x += particle.speedX;
+            particle.x += particle.speedX * 0.4; // Much slower
             if (particle.x > canvas.width + 50) {
                 particle.x = -50;
                 particle.y = Math.random() * canvas.height * 0.3;
@@ -1685,25 +2714,56 @@ function renderScene() {
 function drawClouds() {
     const brightness = gameState.atmosphere.brightness;
     const time = Date.now() / 50000;
+    const scale = canvas.height / 600;
     
-    ctx.globalAlpha = 0.3 * brightness;
-    
-    // Multiple cloud layers for depth
-    const clouds = [
-        { x: (time * 20) % (canvas.width + 400) - 200, y: 80, scale: 1.2 },
-        { x: (time * 15 + 300) % (canvas.width + 400) - 200, y: 120, scale: 1.0 },
-        { x: (time * 10 + 600) % (canvas.width + 400) - 200, y: 50, scale: 0.8 }
+    // Multiple cloud layers with very slow movement for calm atmosphere
+    const slowTime = time * 0.3; // Much slower cloud movement
+    const cloudLayers = [
+        { x: (slowTime * 18) % (canvas.width + 500) - 250, y: 60 * scale, scale: 1.4, alpha: 0.25 },
+        { x: (slowTime * 25 + 250) % (canvas.width + 500) - 250, y: 100 * scale, scale: 1.1, alpha: 0.35 },
+        { x: (slowTime * 15 + 500) % (canvas.width + 500) - 250, y: 140 * scale, scale: 1.0, alpha: 0.3 },
+        { x: (slowTime * 12 + 750) % (canvas.width + 500) - 250, y: 45 * scale, scale: 0.9, alpha: 0.22 },
+        { x: (slowTime * 20 + 950) % (canvas.width + 500) - 250, y: 115 * scale, scale: 1.3, alpha: 0.28 }
     ];
     
-    clouds.forEach(cloud => {
-        ctx.fillStyle = adjustBrightness('#ffffff', brightness);
-        
-        // Draw fluffy cloud shape
+    cloudLayers.forEach(cloud => {
+        // Cloud shadow/depth layer
+        ctx.globalAlpha = cloud.alpha * brightness * 0.6;
+        ctx.fillStyle = adjustBrightness('#d0dce8', brightness);
         ctx.beginPath();
-        ctx.arc(cloud.x, cloud.y, 40 * cloud.scale, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 30 * cloud.scale, cloud.y, 50 * cloud.scale, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 70 * cloud.scale, cloud.y, 40 * cloud.scale, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 50 * cloud.scale, cloud.y - 20 * cloud.scale, 35 * cloud.scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 5 * scale, cloud.y + 8 * scale, 35 * cloud.scale * scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 35 * cloud.scale * scale, cloud.y + 10 * scale, 45 * cloud.scale * scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 75 * cloud.scale * scale, cloud.y + 8 * scale, 38 * cloud.scale * scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 55 * cloud.scale * scale, cloud.y - 12 * scale, 32 * cloud.scale * scale, 0, Math.PI * 2);
+        ctx.arc(cloud.x + 100 * cloud.scale * scale, cloud.y + 5 * scale, 30 * cloud.scale * scale, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Main cloud body with gradients
+        ctx.globalAlpha = cloud.alpha * brightness;
+        const cloudParts = [
+            { x: cloud.x, y: cloud.y, r: 40 * cloud.scale * scale },
+            { x: cloud.x + 35 * cloud.scale * scale, y: cloud.y, r: 50 * cloud.scale * scale },
+            { x: cloud.x + 75 * cloud.scale * scale, y: cloud.y, r: 42 * cloud.scale * scale },
+            { x: cloud.x + 55 * cloud.scale * scale, y: cloud.y - 18 * scale, r: 35 * cloud.scale * scale },
+            { x: cloud.x + 105 * cloud.scale * scale, y: cloud.y, r: 32 * cloud.scale * scale }
+        ];
+        
+        cloudParts.forEach((part, i) => {
+            const grad = ctx.createRadialGradient(part.x - part.r * 0.2, part.y - part.r * 0.2, part.r * 0.3, part.x, part.y, part.r);
+            grad.addColorStop(0, adjustBrightness('#ffffff', brightness * 1.1));
+            grad.addColorStop(0.6, adjustBrightness('#f5f8fc', brightness));
+            grad.addColorStop(1, adjustBrightness('#e8ecf5', brightness * 0.95));
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(part.x, part.y, part.r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        
+        // Cloud highlights for volume
+        ctx.globalAlpha = cloud.alpha * brightness * 0.5;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath();
+        ctx.arc(cloud.x + 40 * cloud.scale * scale, cloud.y - 10 * scale, 25 * cloud.scale * scale, 0, Math.PI * 2);
         ctx.fill();
     });
     
@@ -1712,27 +2772,30 @@ function drawClouds() {
 
 function drawDistantHills() {
     const brightness = gameState.atmosphere.brightness;
+    const scale = canvas.height / 600;
     
-    ctx.globalAlpha = 0.4;
-    
-    // Multiple layers of hills for depth
+    // Smoother layered hills with subtle gradients
     const hillLayers = [
-        { y: 0.50, color: '#4a6a5a', height: 40 },
-        { y: 0.53, color: '#3a5a4a', height: 35 },
-        { y: 0.56, color: '#2a4a3a', height: 30 }
+        { y: 0.50, colorTop: '#6b8798', colorBottom: '#577182', height: 60 * scale, alpha: 0.28 },
+        { y: 0.53, colorTop: '#5c7a89', colorBottom: '#496676', height: 55 * scale, alpha: 0.34 },
+        { y: 0.56, colorTop: '#4f6b78', colorBottom: '#3f5966', height: 48 * scale, alpha: 0.42 },
+        { y: 0.59, colorTop: '#435b66', colorBottom: '#344952', height: 42 * scale, alpha: 0.50 }
     ];
     
     hillLayers.forEach((layer, index) => {
-        ctx.fillStyle = adjustBrightness(layer.color, brightness * (0.4 + index * 0.1));
-        ctx.beginPath();
-        ctx.moveTo(0, canvas.height * layer.y + layer.height);
+        ctx.globalAlpha = layer.alpha * brightness;
+        const grad = ctx.createLinearGradient(0, canvas.height * layer.y - layer.height, 0, canvas.height * 0.65);
+        grad.addColorStop(0, adjustBrightness(layer.colorTop, brightness));
+        grad.addColorStop(1, adjustBrightness(layer.colorBottom, brightness));
+        ctx.fillStyle = grad;
         
-        for (let x = 0; x <= canvas.width; x += 40) {
-            const noise = Math.sin((x + index * 100) * 0.008) * layer.height + 
-                         Math.cos((x + index * 50) * 0.015) * (layer.height * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height * layer.y + layer.height * 0.2);
+        for (let x = 0; x <= canvas.width; x += 30) {
+            const noise = Math.sin((x + index * 120) * 0.005) * (layer.height * 0.5) +
+                          Math.cos((x + index * 70) * 0.01) * (layer.height * 0.35);
             ctx.lineTo(x, canvas.height * layer.y + noise);
         }
-        
         ctx.lineTo(canvas.width, canvas.height * 0.65);
         ctx.lineTo(0, canvas.height * 0.65);
         ctx.closePath();
@@ -1745,53 +2808,81 @@ function drawDistantHills() {
 function drawDistantTrees() {
     const brightness = gameState.atmosphere.brightness;
     
-    ctx.globalAlpha = 0.65;
+    // Softer distant forest (no harsh triangles)
+    const layerColors = [
+        { color: '#335245', alpha: 0.45, scale: 0.95, offsetY: 0.56 },
+        { color: '#2e4a3f', alpha: 0.55, scale: 1.05, offsetY: 0.57 }
+    ];
     
-    // Dense distant forest
-    ctx.fillStyle = adjustBrightness('#2a4a3a', brightness * 0.65);
-    
-    for (let i = 0; i < 30; i++) {
-        const x = (i * canvas.width / 29) - 20;
-        const y = canvas.height * 0.54;
-        const height = 60 + (Math.sin(i * 0.5) * 15) + (i % 4) * 20;
-        const width = 8 + (i % 3) * 4;
-        
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x - width, y + height);
-        ctx.lineTo(x + width, y + height);
-        ctx.closePath();
-        ctx.fill();
-    }
+    layerColors.forEach((layer, li) => {
+        ctx.globalAlpha = layer.alpha * brightness;
+        const count = 26;
+        for (let i = 0; i < count; i++) {
+            const x = (i * canvas.width / (count - 1)) - 25 + (li * 8);
+            const baseY = canvas.height * layer.offsetY;
+            const h = (70 + Math.sin(i * 0.7) * 10 + (i % 3) * 8) * layer.scale;
+            const w = (26 + (i % 4) * 4) * layer.scale;
+            
+            // Soft cone with gradient
+            const grad = ctx.createLinearGradient(x, baseY, x, baseY + h);
+            grad.addColorStop(0, adjustBrightness(layer.color, brightness * 1.05));
+            grad.addColorStop(1, adjustBrightness(layer.color, brightness * 0.8));
+            ctx.fillStyle = grad;
+            
+            ctx.beginPath();
+            ctx.moveTo(x, baseY);
+            ctx.quadraticCurveTo(x - w * 0.55, baseY + h * 0.45, x - w * 0.4, baseY + h);
+            ctx.lineTo(x + w * 0.4, baseY + h);
+            ctx.quadraticCurveTo(x + w * 0.55, baseY + h * 0.45, x, baseY);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Soft base shadow
+            ctx.fillStyle = `rgba(0,0,0,${0.08 * layer.alpha})`;
+            ctx.beginPath();
+            ctx.ellipse(x, baseY + h, w * 0.45, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
     
     ctx.globalAlpha = 1;
 }
 
 function drawCabin() {
     const brightness = gameState.atmosphere.brightness;
+    const time = Date.now() / 1000;
+    const scale = canvas.height / 600;
     const cabinX = canvas.width * 0.15;
     const cabinY = canvas.height * 0.48;
-    const cabinWidth = 80;
-    const cabinHeight = 50;
+    const cabinWidth = 90 * scale;
+    const cabinHeight = 55 * scale;
     
     // Update clickable area
-    cabinClickArea.x = cabinX - 5;
-    cabinClickArea.y = cabinY - 10;
-    cabinClickArea.width = cabinWidth + 10;
-    cabinClickArea.height = cabinHeight + 15;
+    cabinClickArea.x = cabinX - 8 * scale;
+    cabinClickArea.y = cabinY - 15 * scale;
+    cabinClickArea.width = cabinWidth + 16 * scale;
+    cabinClickArea.height = cabinHeight + 20 * scale;
     
-    // Cabin shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-    ctx.fillRect(cabinX + 3, cabinY + cabinHeight - 2, cabinWidth, 8);
+    // Cabin shadow with gradient
+    const shadowGrad = ctx.createRadialGradient(cabinX + cabinWidth/2, cabinY + cabinHeight, 10, cabinX + cabinWidth/2, cabinY + cabinHeight, cabinWidth);
+    shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.3)');
+    shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = shadowGrad;
+    ctx.fillRect(cabinX - 5 * scale, cabinY + cabinHeight - 2 * scale, cabinWidth + 10 * scale, 10 * scale);
     
-    // Cabin walls (log cabin)
-    ctx.fillStyle = adjustBrightness('#6d5a44', brightness);
+    // Cabin walls (log cabin) with texture gradient
+    const wallGrad = ctx.createLinearGradient(cabinX, cabinY, cabinX + cabinWidth, cabinY);
+    wallGrad.addColorStop(0, adjustBrightness('#5a4a35', brightness));
+    wallGrad.addColorStop(0.3, adjustBrightness('#6d5a44', brightness));
+    wallGrad.addColorStop(0.7, adjustBrightness('#7d6a54', brightness));
+    wallGrad.addColorStop(1, adjustBrightness('#5a4a35', brightness));
+    ctx.fillStyle = wallGrad;
     ctx.fillRect(cabinX, cabinY, cabinWidth, cabinHeight);
     
-    // Log lines (horizontal)
-    ctx.strokeStyle = adjustBrightness('#5a4a35', brightness);
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 6; i++) {
+    // Simple log lines (horizontal)
+    ctx.strokeStyle = adjustBrightness('#4a3a25', brightness);
+    ctx.lineWidth = 2 * scale;
+    for (let i = 0; i <= 6; i++) {
         const y = cabinY + i * (cabinHeight / 6);
         ctx.beginPath();
         ctx.moveTo(cabinX, y);
@@ -1799,77 +2890,142 @@ function drawCabin() {
         ctx.stroke();
     }
     
-    // Roof
-    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    // Roof with gradient
+    const roofGrad = ctx.createLinearGradient(cabinX, cabinY - 30 * scale, cabinX, cabinY);
+    roofGrad.addColorStop(0, adjustBrightness('#3a2a1a', brightness));
+    roofGrad.addColorStop(0.5, adjustBrightness('#4a3a2a', brightness));
+    roofGrad.addColorStop(1, adjustBrightness('#3a2a1a', brightness));
+    ctx.fillStyle = roofGrad;
     ctx.beginPath();
-    ctx.moveTo(cabinX - 10, cabinY);
-    ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 25);
-    ctx.lineTo(cabinX + cabinWidth + 10, cabinY);
+    ctx.moveTo(cabinX - 12 * scale, cabinY);
+    ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 30 * scale);
+    ctx.lineTo(cabinX + cabinWidth + 12 * scale, cabinY);
     ctx.closePath();
     ctx.fill();
     
-    // Roof shingles
-    ctx.strokeStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 4; i++) {
+    // Simple roof shingles
+    ctx.strokeStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.lineWidth = 1.5 * scale;
+    for (let row = 0; row < 3; row++) {
+        const rowY = cabinY - row * 10 * scale;
         ctx.beginPath();
-        ctx.moveTo(cabinX - 8 + i * 22, cabinY - i * 6);
-        ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 25 + i * 6);
+        ctx.moveTo(cabinX - 10 * scale, rowY);
+        ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 30 * scale + row * 10 * scale);
         ctx.stroke();
-        
         ctx.beginPath();
-        ctx.moveTo(cabinX + cabinWidth + 8 - i * 22, cabinY - i * 6);
-        ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 25 + i * 6);
+        ctx.moveTo(cabinX + cabinWidth + 10 * scale, rowY);
+        ctx.lineTo(cabinX + cabinWidth / 2, cabinY - 30 * scale + row * 10 * scale);
         ctx.stroke();
     }
     
-    // Door
-    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.fillRect(cabinX + 10, cabinY + 15, 18, 35);
-    
-    // Door handle
-    ctx.fillStyle = adjustBrightness('#8B7355', brightness);
+    // Door with wood grain
+    const doorGrad = ctx.createLinearGradient(cabinX + 12 * scale, cabinY + 16 * scale, cabinX + 30 * scale, cabinY + 16 * scale);
+    doorGrad.addColorStop(0, adjustBrightness('#2a1a0a', brightness));
+    doorGrad.addColorStop(0.5, adjustBrightness('#3a2a1a', brightness));
+    doorGrad.addColorStop(1, adjustBrightness('#2a1a0a', brightness));
+    ctx.fillStyle = doorGrad;
     ctx.beginPath();
-    ctx.arc(cabinX + 24, cabinY + 32, 2, 0, Math.PI * 2);
+    ctx.roundRect(cabinX + 12 * scale, cabinY + 16 * scale, 20 * scale, 38 * scale, 2 * scale);
     ctx.fill();
     
-    // Window
-    ctx.fillStyle = adjustBrightness('#5a7a8a', brightness * 1.2);
-    ctx.fillRect(cabinX + 45, cabinY + 20, 20, 15);
+    // Door frame
+    ctx.strokeStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.lineWidth = 2 * scale;
+    ctx.strokeRect(cabinX + 12 * scale, cabinY + 16 * scale, 20 * scale, 38 * scale);
+    
+    // Door planks
+    ctx.strokeStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.lineWidth = 1 * scale;
+    for (let i = 0; i < 5; i++) {
+        const plankY = cabinY + 20 * scale + i * 8 * scale;
+        ctx.beginPath();
+        ctx.moveTo(cabinX + 13 * scale, plankY);
+        ctx.lineTo(cabinX + 31 * scale, plankY);
+        ctx.stroke();
+    }
+    
+    // Door handle with shine
+    ctx.fillStyle = adjustBrightness('#8B7355', brightness);
+    ctx.beginPath();
+    ctx.arc(cabinX + 27 * scale, cabinY + 35 * scale, 2.5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath();
+    ctx.arc(cabinX + 26.5 * scale, cabinY + 34.5 * scale, 1 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Window with depth
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.fillRect(cabinX + 48 * scale, cabinY + 21 * scale, 24 * scale, 18 * scale);
+    
+    // Window glass with reflection
+    const windowGrad = ctx.createLinearGradient(cabinX + 50 * scale, cabinY + 23 * scale, cabinX + 70 * scale, cabinY + 37 * scale);
+    windowGrad.addColorStop(0, adjustBrightness('#7a9aaa', brightness * 1.3));
+    windowGrad.addColorStop(0.5, adjustBrightness('#5a7a8a', brightness * 1.2));
+    windowGrad.addColorStop(1, adjustBrightness('#4a6a7a', brightness * 1.1));
+    ctx.fillStyle = windowGrad;
+    ctx.fillRect(cabinX + 50 * scale, cabinY + 23 * scale, 20 * scale, 14 * scale);
     
     // Window panes
     ctx.strokeStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5 * scale;
     ctx.beginPath();
-    ctx.moveTo(cabinX + 55, cabinY + 20);
-    ctx.lineTo(cabinX + 55, cabinY + 35);
+    ctx.moveTo(cabinX + 60 * scale, cabinY + 23 * scale);
+    ctx.lineTo(cabinX + 60 * scale, cabinY + 37 * scale);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(cabinX + 45, cabinY + 27.5);
-    ctx.lineTo(cabinX + 65, cabinY + 27.5);
+    ctx.moveTo(cabinX + 50 * scale, cabinY + 30 * scale);
+    ctx.lineTo(cabinX + 70 * scale, cabinY + 30 * scale);
     ctx.stroke();
     
-    // Window reflection
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fillRect(cabinX + 47, cabinY + 22, 6, 4);
+    // Window reflection/shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillRect(cabinX + 52 * scale, cabinY + 24 * scale, 7 * scale, 5 * scale);
     
-    // Chimney
-    ctx.fillStyle = adjustBrightness('#5a4a35', brightness);
-    ctx.fillRect(cabinX + cabinWidth - 15, cabinY - 15, 12, 20);
-    
-    // Chimney top
-    ctx.fillRect(cabinX + cabinWidth - 17, cabinY - 16, 16, 3);
-    
-    // Smoke
+    // Warm light from inside (if enabled)
     if (gameState.atmosphere.soundEnabled) {
-        const time = Date.now() / 1000;
-        ctx.globalAlpha = 0.3;
-        ctx.fillStyle = adjustBrightness('#888888', brightness);
-        for (let i = 0; i < 3; i++) {
-            const smokeY = cabinY - 18 - i * 8 + Math.sin(time + i) * 2;
-            const smokeX = cabinX + cabinWidth - 9 + Math.sin(time * 2 + i) * 3;
+        ctx.fillStyle = `rgba(255, 200, 100, ${0.3 * brightness})`;
+        ctx.fillRect(cabinX + 50 * scale, cabinY + 23 * scale, 20 * scale, 14 * scale);
+    }
+    
+    // Chimney with bricks
+    const chimneyGrad = ctx.createLinearGradient(cabinX + cabinWidth - 18 * scale, cabinY - 18 * scale, cabinX + cabinWidth - 6 * scale, cabinY - 18 * scale);
+    chimneyGrad.addColorStop(0, adjustBrightness('#4a3a25', brightness));
+    chimneyGrad.addColorStop(0.5, adjustBrightness('#5a4a35', brightness));
+    chimneyGrad.addColorStop(1, adjustBrightness('#4a3a25', brightness));
+    ctx.fillStyle = chimneyGrad;
+    ctx.fillRect(cabinX + cabinWidth - 18 * scale, cabinY - 18 * scale, 14 * scale, 23 * scale);
+    
+    // Chimney bricks
+    ctx.strokeStyle = adjustBrightness('#3a2a15', brightness);
+    ctx.lineWidth = 1 * scale;
+    for (let i = 0; i < 5; i++) {
+        const brickY = cabinY - 16 * scale + i * 5 * scale;
+        ctx.beginPath();
+        ctx.moveTo(cabinX + cabinWidth - 18 * scale, brickY);
+        ctx.lineTo(cabinX + cabinWidth - 4 * scale, brickY);
+        ctx.stroke();
+    }
+    
+    // Chimney top/cap
+    ctx.fillStyle = adjustBrightness('#3a2a15', brightness);
+    ctx.fillRect(cabinX + cabinWidth - 20 * scale, cabinY - 19 * scale, 18 * scale, 3 * scale);
+    
+    // Animated smoke
+    if (gameState.atmosphere.soundEnabled) {
+        ctx.globalAlpha = 0.4;
+        for (let i = 0; i < 4; i++) {
+            const smokeY = cabinY - 22 * scale - i * 10 * scale + Math.sin(time + i) * 3 * scale;
+            const smokeX = cabinX + cabinWidth - 11 * scale + Math.sin(time * 2 + i) * 4 * scale;
+            const smokeSize = (5 + i * 2) * scale;
+            
+            const smokeGrad = ctx.createRadialGradient(smokeX, smokeY, 0, smokeX, smokeY, smokeSize);
+            smokeGrad.addColorStop(0, adjustBrightness('#999999', brightness));
+            smokeGrad.addColorStop(1, 'rgba(153, 153, 153, 0)');
+            ctx.fillStyle = smokeGrad;
             ctx.beginPath();
-            ctx.arc(smokeX, smokeY, 4 + i, 0, Math.PI * 2);
+            ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
             ctx.fill();
         }
         ctx.globalAlpha = 1;
@@ -1877,11 +3033,10 @@ function drawCabin() {
     
     // Highlight if hoverable
     if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
-        const time = Date.now() / 1000;
-        ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.05;
-        ctx.strokeStyle = '#e8dcc4';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
+        ctx.globalAlpha = 0.35 + Math.sin(time * 2) * 0.12;
+        ctx.strokeStyle = '#f6e8c5';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([9, 7]);
         ctx.strokeRect(cabinClickArea.x, cabinClickArea.y, cabinClickArea.width, cabinClickArea.height);
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
@@ -1936,193 +3091,307 @@ function drawWaterWaves(time) {
 
 function drawWaterPlants() {
     const brightness = gameState.atmosphere.brightness;
-    
-    // Lily pads
-    const lilyPads = [
-        { x: 150, y: canvas.height * 0.75, size: 25, rotation: 0.3 },
-        { x: 280, y: canvas.height * 0.72, size: 20, rotation: -0.5 },
-        { x: 200, y: canvas.height * 0.82, size: 22, rotation: 0.8 },
-        { x: 400, y: canvas.height * 0.78, size: 18, rotation: -0.2 }
-    ];
-    
+    const lilyPads = (sceneLayout && sceneLayout.lilyPads && sceneLayout.lilyPads.length)
+        ? sceneLayout.lilyPads
+        : [
+            { x: canvas.width * 0.18, y: canvas.height * 0.75, size: 22 },
+            { x: canvas.width * 0.32, y: canvas.height * 0.78, size: 18 },
+            { x: canvas.width * 0.48, y: canvas.height * 0.74, size: 20 },
+            { x: canvas.width * 0.66, y: canvas.height * 0.77, size: 17 },
+            { x: canvas.width * 0.82, y: canvas.height * 0.76, size: 19 }
+        ];
+
     lilyPads.forEach(pad => {
-        ctx.save();
-        ctx.translate(pad.x, pad.y);
-        ctx.rotate(pad.rotation);
-        
-        // Lily pad shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        // Shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
         ctx.beginPath();
-        ctx.ellipse(2, 2, pad.size, pad.size * 0.8, 0, 0, Math.PI * 2);
+        ctx.ellipse(pad.x + 2, pad.y + 3, pad.size, pad.size * 0.7, 0, 0, Math.PI * 2);
         ctx.fill();
         
-        // Lily pad
+        // Pad
         ctx.fillStyle = adjustBrightness('#4a6a3a', brightness);
         ctx.beginPath();
-        ctx.ellipse(0, 0, pad.size, pad.size * 0.8, 0, 0, Math.PI * 2);
+        ctx.ellipse(pad.x, pad.y, pad.size, pad.size * 0.7, 0, 0, Math.PI * 2);
         ctx.fill();
         
-        // Lily pad notch
+        // Notch
         ctx.fillStyle = adjustBrightness('#3a5a2a', brightness);
         ctx.beginPath();
-        ctx.moveTo(pad.size * 0.7, -pad.size * 0.3);
-        ctx.lineTo(pad.size, 0);
-        ctx.lineTo(pad.size * 0.7, pad.size * 0.3);
+        ctx.moveTo(pad.x + pad.size * 0.6, pad.y - pad.size * 0.25);
+        ctx.lineTo(pad.x + pad.size * 0.9, pad.y);
+        ctx.lineTo(pad.x + pad.size * 0.6, pad.y + pad.size * 0.25);
         ctx.closePath();
         ctx.fill();
-        
-        // Lily pad vein
-        ctx.strokeStyle = adjustBrightness('#3a5a2a', brightness);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(pad.size * 0.8, 0);
-        ctx.stroke();
-        
-        ctx.restore();
     });
     
-    // Reeds in the background
-    ctx.globalAlpha = 0.6;
-    const reeds = [
-        { x: 80, heights: [40, 50, 45] },
-        { x: 120, heights: [45, 55, 48] },
-        { x: 900, heights: [42, 52, 46] },
-        { x: 950, heights: [38, 48, 44] }
-    ];
-    
+    // Very subtle reeds, static
+    const reeds = (sceneLayout && sceneLayout.reeds && sceneLayout.reeds.length)
+        ? sceneLayout.reeds
+        : [
+            { x: canvas.width * 0.22, heights: [36, 44, 40] },
+            { x: canvas.width * 0.45, heights: [38, 46, 42] },
+            { x: canvas.width * 0.68, heights: [34, 42, 38] },
+            { x: canvas.width * 0.86, heights: [32, 40, 36] }
+        ];
+    ctx.globalAlpha = 0.45;
     reeds.forEach(reed => {
         reed.heights.forEach((height, i) => {
-            const x = reed.x + i * 5;
+            const x = reed.x + i * 6;
             const baseY = canvas.height * 0.72;
-            const sway = Math.sin(Date.now() / 800 + x) * 3;
             
             ctx.strokeStyle = adjustBrightness('#4a5a3a', brightness);
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(x, baseY);
-            ctx.quadraticCurveTo(x + sway, baseY - height / 2, x + sway * 2, baseY - height);
+            ctx.quadraticCurveTo(x, baseY - height / 2, x, baseY - height);
             ctx.stroke();
             
             // Reed top
             ctx.fillStyle = adjustBrightness('#5a6a4a', brightness);
             ctx.beginPath();
-            ctx.ellipse(x + sway * 2, baseY - height - 3, 2, 5, 0, 0, Math.PI * 2);
+            ctx.ellipse(x, baseY - height - 3, 2, 5, 0, 0, Math.PI * 2);
             ctx.fill();
         });
     });
-    
     ctx.globalAlpha = 1;
 }
 
 function drawTrees() {
     const brightness = gameState.atmosphere.brightness;
-    
-    // More detailed tree shapes
-    const treePositions = [
-        { x: 150, scale: 1.2, offset: 0 },
-        { x: 320, scale: 1.0, offset: 10 },
-        { x: 550, scale: 1.3, offset: -5 },
-        { x: 750, scale: 0.9, offset: 5 },
-        { x: 900, scale: 1.1, offset: 0 }
-    ];
-    
-    treePositions.forEach(tree => {
-        const x = tree.x;
-        const y = canvas.height * 0.56 + tree.offset;
-        const scale = tree.scale;
-        
-        // Trunk
-        ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
-        ctx.fillRect(x - 6 * scale, y, 12 * scale, 80 * scale);
-        
-        // Tree crown - layered for depth
-        const layers = [
-            { y: y + 10 * scale, size: 45 * scale, color: '#2d5a2d' },
-            { y: y - 10 * scale, size: 40 * scale, color: '#3a6a3a' },
-            { y: y - 25 * scale, size: 35 * scale, color: '#4a7a4a' }
+    const trees = (sceneLayout && sceneLayout.trees && sceneLayout.trees.length)
+        ? sceneLayout.trees
+        : [
+            { x: canvas.width * 0.16, scale: 0.8, type: 'pine' },
+            { x: canvas.width * 0.35, scale: 0.7, type: 'oak' },
+            { x: canvas.width * 0.58, scale: 0.85, type: 'pine' },
+            { x: canvas.width * 0.82, scale: 0.75, type: 'oak' }
         ];
+
+    const baseY = canvas.height * 0.58;
+    
+    trees.forEach(tree => {
+        if (tree.type === 'pine') {
+            drawPineTreeStatic(tree.x, baseY, tree.scale, brightness);
+        } else {
+            drawOakTreeStatic(tree.x, baseY, tree.scale, brightness);
+        }
         
-        layers.forEach(layer => {
-            ctx.fillStyle = adjustBrightness(layer.color, brightness);
-            ctx.beginPath();
-            ctx.moveTo(x, layer.y - layer.size);
-            ctx.lineTo(x - layer.size, layer.y + layer.size * 0.5);
-            ctx.lineTo(x + layer.size, layer.y + layer.size * 0.5);
-            ctx.closePath();
-            ctx.fill();
-        });
+        // Ground shadow under each tree
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        ctx.beginPath();
+        ctx.ellipse(tree.x, baseY + 62 * tree.scale, 26 * tree.scale, 9 * tree.scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function drawPineTreeStatic(x, y, scale, brightness) {
+    // trunk
+    const w = 10 * scale;
+    const h = 65 * scale;
+    const trunkGrad = ctx.createLinearGradient(x - w, y, x + w, y + h);
+    trunkGrad.addColorStop(0, adjustBrightness('#2f2216', brightness));
+    trunkGrad.addColorStop(1, adjustBrightness('#4a3626', brightness));
+    ctx.fillStyle = trunkGrad;
+    ctx.fillRect(x - w, y, w * 2, h);
+    
+    // foliage layers
+    const layers = [
+        { yOff: -10, w: 55, h: 32, c: '#2f5c32' },
+        { yOff: -28, w: 48, h: 28, c: '#3c6d3c' },
+        { yOff: -44, w: 40, h: 25, c: '#4b7d4b' },
+        { yOff: -58, w: 32, h: 22, c: '#5b8d5b' }
+    ];
+    layers.forEach(l => {
+        const lw = l.w * scale;
+        const lh = l.h * scale;
+        const ly = y + l.yOff * scale;
+        const grad = ctx.createLinearGradient(x, ly - lh, x, ly + lh * 0.6);
+        grad.addColorStop(0, adjustBrightness(l.c, brightness * 1.05));
+        grad.addColorStop(1, adjustBrightness(l.c, brightness * 0.85));
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(x, ly - lh);
+        ctx.lineTo(x - lw, ly + lh * 0.6);
+        ctx.lineTo(x + lw, ly + lh * 0.6);
+        ctx.closePath();
+        ctx.fill();
+    });
+}
+
+function drawOakTreeStatic(x, y, scale, brightness) {
+    // trunk
+    const w = 12 * scale;
+    const h = 55 * scale;
+    const trunkGrad = ctx.createLinearGradient(x - w, y, x + w, y + h);
+    trunkGrad.addColorStop(0, adjustBrightness('#3a2a1a', brightness));
+    trunkGrad.addColorStop(1, adjustBrightness('#543c28', brightness));
+    ctx.fillStyle = trunkGrad;
+    ctx.fillRect(x - w, y, w * 2, h);
+    
+    // crown
+    const blobs = [
+        { xOff: -18, yOff: -22, r: 32, c: '#3a6a3a' },
+        { xOff: 18, yOff: -18, r: 30, c: '#4a7a4a' },
+        { xOff: 0, yOff: -35, r: 34, c: '#5a8a5a' }
+    ];
+    blobs.forEach(b => {
+        const r = b.r * scale;
+        const gx = x + b.xOff * scale;
+        const gy = y + b.yOff * scale;
+        const grad = ctx.createRadialGradient(gx - r * 0.2, gy - r * 0.2, r * 0.3, gx, gy, r);
+        grad.addColorStop(0, adjustBrightness(b.c, brightness * 1.15));
+        grad.addColorStop(1, adjustBrightness(b.c, brightness * 0.85));
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(gx, gy, r, 0, Math.PI * 2);
+        ctx.fill();
     });
 }
 
 function drawShore() {
     const brightness = gameState.atmosphere.brightness;
+    const scale = canvas.height / 600;
     
-    // Grass and earth with more natural edge
-    ctx.fillStyle = adjustBrightness('#4a5a3a', brightness);
-    ctx.beginPath();
-    ctx.moveTo(canvas.width * 0.55, canvas.height * 0.65);
+    // Ground layers with texture
+    const groundLayers = [
+        { yStart: 0.63, yEnd: 0.66, color: '#5a6a4a', noise: 0.05 },
+        { yStart: 0.66, yEnd: 0.675, color: '#4a5a3a', noise: 0.06 },
+        { yStart: 0.675, yEnd: 0.69, color: '#3a4a2a', noise: 0.07 }
+    ];
     
-    // Create irregular shoreline
-    for (let x = canvas.width * 0.55; x <= canvas.width; x += 20) {
-        const noise = Math.sin(x * 0.05) * 2;
-        ctx.lineTo(x, canvas.height * 0.63 + noise);
-    }
-    
-    ctx.lineTo(canvas.width, canvas.height * 0.67);
-    
-    for (let x = canvas.width; x >= canvas.width * 0.55; x -= 20) {
-        const noise = Math.cos(x * 0.05) * 2;
-        ctx.lineTo(x, canvas.height * 0.67 + noise);
-    }
-    
-    ctx.closePath();
-    ctx.fill();
-    
-    // Darker earth layer
-    ctx.fillStyle = adjustBrightness('#3a4a2a', brightness);
-    ctx.beginPath();
-    ctx.moveTo(canvas.width * 0.55, canvas.height * 0.67);
-    for (let x = canvas.width * 0.55; x <= canvas.width; x += 20) {
-        const noise = Math.cos(x * 0.05) * 2;
-        ctx.lineTo(x, canvas.height * 0.67 + noise);
-    }
-    ctx.lineTo(canvas.width, canvas.height * 0.68);
-    ctx.lineTo(canvas.width * 0.55, canvas.height * 0.68);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Add grass details with more variety
-    ctx.globalAlpha = 0.8;
-    for (let i = 0; i < 30; i++) {
-        const x = canvas.width * 0.6 + Math.random() * canvas.width * 0.35;
-        const y = canvas.height * 0.64 + Math.random() * 15;
-        const height = 8 + Math.random() * 8;
-        const sway = Math.sin(Date.now() / 1000 + i) * 2;
-        
-        ctx.strokeStyle = adjustBrightness(
-            i % 3 === 0 ? '#5a6a4a' : '#4a5a3a', 
-            brightness
-        );
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + sway + (Math.random() - 0.5) * 3, y - height);
-        ctx.stroke();
-    }
-    
-    // Add some small rocks
-    ctx.fillStyle = adjustBrightness('#5a5a5a', brightness);
-    for (let i = 0; i < 8; i++) {
-        const x = canvas.width * 0.58 + Math.random() * canvas.width * 0.3;
-        const y = canvas.height * 0.65 + Math.random() * 8;
-        const size = 2 + Math.random() * 3;
+    groundLayers.forEach((layer, index) => {
+        // Main ground layer with gradient
+        const groundGrad = ctx.createLinearGradient(0, canvas.height * layer.yStart, 0, canvas.height * layer.yEnd);
+        groundGrad.addColorStop(0, adjustBrightness(layer.color, brightness * 1.1));
+        groundGrad.addColorStop(0.5, adjustBrightness(layer.color, brightness));
+        groundGrad.addColorStop(1, adjustBrightness(layer.color, brightness * 0.9));
+        ctx.fillStyle = groundGrad;
         
         ctx.beginPath();
-        ctx.ellipse(x, y, size, size * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.moveTo(canvas.width * 0.55, canvas.height * layer.yStart);
+        
+        for (let x = canvas.width * 0.55; x <= canvas.width; x += 15) {
+            const noise = Math.sin(x * layer.noise + index) * 3 * scale +
+                         Math.cos(x * layer.noise * 1.5 + index * 0.5) * 2 * scale;
+            ctx.lineTo(x, canvas.height * layer.yStart + noise);
+        }
+        
+        ctx.lineTo(canvas.width, canvas.height * layer.yEnd);
+        ctx.lineTo(canvas.width * 0.55, canvas.height * layer.yEnd);
+        ctx.closePath();
         ctx.fill();
+        
+        // Ground texture overlay
+        const specks = sceneLayout?.shoreDetails?.pebbles || [];
+        if (specks.length) {
+            ctx.globalAlpha = 0.25;
+            ctx.fillStyle = adjustBrightness(index % 2 ? '#2a3a1a' : '#3a4a2a', brightness);
+            specks.forEach(s => {
+                ctx.fillRect(s.x, s.y, s.size, s.size);
+            });
+            ctx.globalAlpha = 1;
+        }
+    });
+
+    // Grass tufts for softness near the shoreline
+    const tufts = sceneLayout?.shoreDetails?.tufts || [];
+    if (tufts.length) {
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = adjustBrightness('#42533a', brightness);
+        ctx.lineWidth = 2 * scale;
+        tufts.forEach(tuft => {
+            ctx.beginPath();
+            ctx.moveTo(tuft.x, tuft.y);
+            ctx.quadraticCurveTo(tuft.x - tuft.width * 0.25, tuft.y - tuft.height * 0.4, tuft.x, tuft.y - tuft.height);
+            ctx.quadraticCurveTo(tuft.x + tuft.width * 0.25, tuft.y - tuft.height * 0.4, tuft.x + tuft.width * 0.2, tuft.y);
+            ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
     }
     
+    // Continuous shoreline band for cohesive scene
+    const waterLine = canvas.height * 0.65;
+    const shoreLineY = canvas.height * 0.635;
+    const bandTop = waterLine - 10;
+    const bandBottom = waterLine + 12;
+    // Base darker band
+    ctx.fillStyle = adjustBrightness('#354230', brightness);
+    ctx.beginPath();
+    ctx.moveTo(0, shoreLineY);
+    for (let x = 0; x <= canvas.width; x += 60) {
+        const y = shoreLineY + Math.sin(x * 0.01) * 4 * scale;
+        ctx.lineTo(x, y);
+    }
+    ctx.lineTo(canvas.width, bandBottom);
+    ctx.lineTo(0, bandBottom);
+    ctx.closePath();
+    ctx.fill();
+    // Soft highlight along the rim
+    const shoreHighlight = ctx.createLinearGradient(0, bandTop, 0, bandTop + 18);
+    shoreHighlight.addColorStop(0, 'rgba(255,255,255,0.10)');
+    shoreHighlight.addColorStop(0.6, 'rgba(255,255,255,0.18)');
+    shoreHighlight.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = shoreHighlight;
+    ctx.fillRect(0, bandTop, canvas.width, 18);
+    // Gentle shoreline shadow into water
+    const shoreShadow = ctx.createLinearGradient(0, waterLine, 0, waterLine + 24);
+    shoreShadow.addColorStop(0, 'rgba(0,0,0,0.15)');
+    shoreShadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = shoreShadow;
+    ctx.fillRect(0, waterLine, canvas.width, 24);
+    
+    // Detailed grass with variety
+    const grassTypes = [
+        { count: 50, heightRange: [10, 20], color: '#5a7a4a', thickness: 1.5 },
+        { count: 35, heightRange: [15, 25], color: '#4a6a3a', thickness: 2 },
+        { count: 25, heightRange: [8, 15], color: '#6a8a5a', thickness: 1 }
+    ];
+    
+    if (!shoreCache) shoreCache = { grass: [], flowers: [], rocks: [], specks: [] };
+    if (!shoreCache.grass.length) {
+        grassTypes.forEach(grassType => {
+            for (let i = 0; i < grassType.count; i++) {
+                const x = canvas.width * 0.58 + Math.random() * canvas.width * 0.38;
+                const y = canvas.height * 0.635 + Math.random() * canvas.height * 0.035;
+                const height = (grassType.heightRange[0] + Math.random() * (grassType.heightRange[1] - grassType.heightRange[0])) * scale;
+                const staticBend = (Math.random() - 0.5) * 2 * scale; // Static bend
+                shoreCache.grass.push({ x, y, height, staticBend, color: grassType.color, thickness: grassType.thickness });
+            }
+        });
+    }
+    shoreCache.grass.forEach(g => {
+        ctx.strokeStyle = adjustBrightness(g.color, brightness);
+        ctx.lineWidth = g.thickness * scale;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(g.x, g.y);
+        ctx.quadraticCurveTo(
+            g.x + g.staticBend,
+            g.y - g.height * 0.5,
+            g.x + g.staticBend * 1.5,
+            g.y - g.height
+        );
+        ctx.stroke();
+    });
+    
+    // Simple flowers - completely static, no animation
+    if (!shoreCache.flowers.length) {
+        const flowers = [
+            { x: canvas.width * 0.62, y: canvas.height * 0.645 },
+            { x: canvas.width * 0.72, y: canvas.height * 0.648 },
+            { x: canvas.width * 0.82, y: canvas.height * 0.644 },
+            { x: canvas.width * 0.91, y: canvas.height * 0.650 }
+        ];
+        flowers.forEach(f => shoreCache.flowers.push(f));
+    }
+    shoreCache.flowers.forEach(flower => {
+        ctx.fillStyle = adjustBrightness('#e8a84a', brightness);
+        ctx.beginPath();
+        ctx.arc(flower.x, flower.y - 8 * scale, 3 * scale, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    // Fallen leaves removed to avoid floating yellow pebbles
     ctx.globalAlpha = 1;
 }
 
@@ -2174,222 +3443,665 @@ function drawEmerson() {
     const x = canvas.width * 0.25;
     const y = canvas.height * 0.565;
     const time = Date.now() / 1000;
+    const scale = canvas.height / 600;
     
     // Update clickable area
-    emersonClickArea.x = x - 18;
-    emersonClickArea.y = y - 30;
-    emersonClickArea.width = 36;
-    emersonClickArea.height = 65;
+    emersonClickArea.x = x - 22 * scale;
+    emersonClickArea.y = y - 35 * scale;
+    emersonClickArea.width = 44 * scale;
+    emersonClickArea.height = 75 * scale;
     
-    // Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    // Soft shadow with gradient
+    const shadowGrad = ctx.createRadialGradient(x, y + 38 * scale, 0, x, y + 38 * scale, 18 * scale);
+    shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+    shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = shadowGrad;
     ctx.beginPath();
-    ctx.ellipse(x, y + 36, 12, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 38 * scale, 16 * scale, 5 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     
-    // Legs
-    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
-    ctx.fillRect(x - 5, y + 18, 4, 18);
-    ctx.fillRect(x + 1, y + 18, 4, 18);
+    // Subtle idle animation
+    const idle = Math.sin(time * 0.6) * 0.5 * scale;
     
-    // Body (formal coat)
-    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
-    ctx.fillRect(x - 9, y, 18, 22);
-    
-    // Coat tails
+    // Legs with rounded edges
+    ctx.fillStyle = adjustBrightness('#1a0a0a', brightness);
     ctx.beginPath();
-    ctx.moveTo(x - 9, y + 18);
-    ctx.lineTo(x - 12, y + 26);
-    ctx.lineTo(x - 6, y + 22);
+    ctx.roundRect(x - 6 * scale, y + 19 * scale, 5 * scale, 20 * scale, 2 * scale);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(x + 1 * scale, y + 19 * scale, 5 * scale, 20 * scale, 2 * scale);
+    ctx.fill();
+    
+    // Body (formal coat) with gradient
+    const coatGrad = ctx.createLinearGradient(x - 12 * scale, y, x + 12 * scale, y);
+    coatGrad.addColorStop(0, adjustBrightness('#1a0a0a', brightness));
+    coatGrad.addColorStop(0.5, adjustBrightness('#2a1a0a', brightness));
+    coatGrad.addColorStop(1, adjustBrightness('#1a0a0a', brightness));
+    ctx.fillStyle = coatGrad;
+    ctx.beginPath();
+    ctx.roundRect(x - 11 * scale, y + idle, 22 * scale, 24 * scale, 3 * scale);
+    ctx.fill();
+    
+    // Coat tails with smooth curves
+    ctx.fillStyle = adjustBrightness('#1a0a0a', brightness);
+    ctx.beginPath();
+    ctx.moveTo(x - 11 * scale, y + 20 * scale);
+    ctx.quadraticCurveTo(x - 14 * scale, y + 24 * scale, x - 13 * scale, y + 28 * scale);
+    ctx.lineTo(x - 8 * scale, y + 23 * scale);
     ctx.closePath();
     ctx.fill();
     
     ctx.beginPath();
-    ctx.moveTo(x + 9, y + 18);
-    ctx.lineTo(x + 12, y + 26);
-    ctx.lineTo(x + 6, y + 22);
+    ctx.moveTo(x + 11 * scale, y + 20 * scale);
+    ctx.quadraticCurveTo(x + 14 * scale, y + 24 * scale, x + 13 * scale, y + 28 * scale);
+    ctx.lineTo(x + 8 * scale, y + 23 * scale);
     ctx.closePath();
     ctx.fill();
     
-    // White shirt
+    // White shirt with detail
     ctx.fillStyle = adjustBrightness('#f5f0e8', brightness);
-    ctx.fillRect(x - 5, y + 2, 10, 8);
+    ctx.beginPath();
+    ctx.roundRect(x - 6 * scale, y + 3 * scale + idle, 12 * scale, 10 * scale, 2 * scale);
+    ctx.fill();
     
-    // Arms
+    // Vest
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.beginPath();
+    ctx.moveTo(x - 4 * scale, y + 3 * scale + idle);
+    ctx.lineTo(x - 6 * scale, y + 13 * scale + idle);
+    ctx.lineTo(x + 6 * scale, y + 13 * scale + idle);
+    ctx.lineTo(x + 4 * scale, y + 3 * scale + idle);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Vest buttons
+    ctx.fillStyle = adjustBrightness('#8B7355', brightness);
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y + 5 * scale + i * 3 * scale + idle, 1 * scale, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    // Bow tie
     ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
-    ctx.fillRect(x - 11, y + 4, 4, 14);
-    ctx.fillRect(x + 7, y + 4, 4, 14);
+    ctx.beginPath();
+    ctx.moveTo(x - 4 * scale, y + 2 * scale + idle);
+    ctx.lineTo(x - 2 * scale, y + 1 * scale + idle);
+    ctx.lineTo(x, y + 2 * scale + idle);
+    ctx.lineTo(x + 2 * scale, y + 1 * scale + idle);
+    ctx.lineTo(x + 4 * scale, y + 2 * scale + idle);
+    ctx.lineTo(x + 2 * scale, y + 3 * scale + idle);
+    ctx.lineTo(x, y + 2 * scale + idle);
+    ctx.lineTo(x - 2 * scale, y + 3 * scale + idle);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Arms with shading
+    const armGrad = ctx.createLinearGradient(x - 13 * scale, y, x - 9 * scale, y);
+    armGrad.addColorStop(0, adjustBrightness('#1a0a0a', brightness));
+    armGrad.addColorStop(1, adjustBrightness('#2a1a0a', brightness));
+    ctx.fillStyle = armGrad;
+    ctx.beginPath();
+    ctx.roundRect(x - 13 * scale, y + 5 * scale + idle, 5 * scale, 16 * scale, 2 * scale);
+    ctx.fill();
+    
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.beginPath();
+    ctx.roundRect(x + 8 * scale, y + 5 * scale + idle, 5 * scale, 16 * scale, 2 * scale);
+    ctx.fill();
+    
+    // Hands
+    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
+    ctx.beginPath();
+    ctx.arc(x - 10 * scale, y + 21 * scale + idle, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 10 * scale, y + 21 * scale + idle, 3 * scale, 0, Math.PI * 2);
+    ctx.fill();
     
     // Neck
     ctx.fillStyle = adjustBrightness('#d4a574', brightness);
-    ctx.fillRect(x - 3, y - 2, 6, 4);
-    
-    // Head
-    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
     ctx.beginPath();
-    ctx.arc(x, y - 6, 9, 0, Math.PI * 2);
+    ctx.roundRect(x - 3.5 * scale, y - 2 * scale, 7 * scale, 5 * scale, 2 * scale);
     ctx.fill();
     
-    // Hair (fuller, dignified)
+    // Head with shading
+    const headGrad = ctx.createRadialGradient(x - 2 * scale, y - 8 * scale, 2, x, y - 6 * scale, 11 * scale);
+    headGrad.addColorStop(0, adjustBrightness('#e8c594', brightness));
+    headGrad.addColorStop(0.7, adjustBrightness('#d4a574', brightness));
+    headGrad.addColorStop(1, adjustBrightness('#c49560', brightness));
+    ctx.fillStyle = headGrad;
+    ctx.beginPath();
+    ctx.arc(x, y - 6 * scale, 11 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hair (fuller, dignified) with texture
+    ctx.fillStyle = adjustBrightness('#6a5a4a', brightness);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 13 * scale, 11 * scale, 6 * scale, 0, 0, Math.PI);
+    ctx.fill();
+    
+    // Hair detail
     ctx.fillStyle = adjustBrightness('#5a4a3a', brightness);
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.ellipse(x + i * 4 * scale, y - 12 * scale, 2 * scale, 4 * scale, 0, 0, Math.PI);
+        ctx.fill();
+    }
+    
+    // Eyes with detail
+    ctx.fillStyle = adjustBrightness('#ffffff', brightness);
     ctx.beginPath();
-    ctx.ellipse(x, y - 12, 9, 5, 0, 0, Math.PI);
+    ctx.ellipse(x - 4 * scale, y - 8 * scale, 2 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 4 * scale, y - 8 * scale, 2 * scale, 2.5 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     
-    // Eyes
+    // Pupils
     ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
-    ctx.fillRect(x - 3, y - 8, 2, 2);
-    ctx.fillRect(x + 1, y - 8, 2, 2);
+    ctx.beginPath();
+    ctx.arc(x - 4 * scale, y - 7.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 4 * scale, y - 7.5 * scale, 1.2 * scale, 0, Math.PI * 2);
+    ctx.fill();
     
-    // Top hat
-    ctx.fillStyle = adjustBrightness('#1a0a0a', brightness);
+    // Eye highlights
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.beginPath();
+    ctx.arc(x - 3.5 * scale, y - 8 * scale, 0.7 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 4.5 * scale, y - 8 * scale, 0.7 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Nose
+    ctx.fillStyle = adjustBrightness('#c49560', brightness);
+    ctx.beginPath();
+    ctx.moveTo(x, y - 7 * scale);
+    ctx.lineTo(x - 1 * scale, y - 4 * scale);
+    ctx.lineTo(x + 1 * scale, y - 4 * scale);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Mouth
+    ctx.strokeStyle = adjustBrightness('#8a6a4a', brightness);
+    ctx.lineWidth = 1 * scale;
+    ctx.beginPath();
+    ctx.arc(x, y - 2 * scale, 3 * scale, 0, Math.PI, false);
+    ctx.stroke();
+    
+    // Top hat with detail and shading
+    const hatGrad = ctx.createLinearGradient(x - 10 * scale, y - 32 * scale, x + 10 * scale, y - 20 * scale);
+    hatGrad.addColorStop(0, adjustBrightness('#0a0000', brightness));
+    hatGrad.addColorStop(0.5, adjustBrightness('#1a0a0a', brightness));
+    hatGrad.addColorStop(1, adjustBrightness('#0a0000', brightness));
+    
     // Hat brim
-    ctx.fillRect(x - 12, y - 16, 24, 3);
-    // Hat crown (tall)
-    ctx.fillRect(x - 8, y - 28, 16, 15);
-    
-    // Cane
-    ctx.strokeStyle = adjustBrightness('#4a3a2a', brightness);
-    ctx.lineWidth = 2.5;
+    ctx.fillStyle = adjustBrightness('#1a0a0a', brightness);
     ctx.beginPath();
-    ctx.moveTo(x + 11, y + 6);
-    ctx.lineTo(x + 11, y + 20);
+    ctx.ellipse(x, y - 16 * scale, 15 * scale, 3 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hat crown (tall and elegant)
+    ctx.fillStyle = hatGrad;
+    ctx.beginPath();
+    ctx.moveTo(x - 10 * scale, y - 16 * scale);
+    ctx.lineTo(x - 9 * scale, y - 32 * scale);
+    ctx.lineTo(x + 9 * scale, y - 32 * scale);
+    ctx.lineTo(x + 10 * scale, y - 16 * scale);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Hat top
+    ctx.fillStyle = adjustBrightness('#0a0000', brightness);
+    ctx.beginPath();
+    ctx.ellipse(x, y - 32 * scale, 9 * scale, 2 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Hat shine
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fillRect(x - 6 * scale, y - 30 * scale, 8 * scale, 8 * scale);
+    
+    // Hat band
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.fillRect(x - 10 * scale, y - 18 * scale, 20 * scale, 3 * scale);
+    
+    // Cane with detail
+    const caneGrad = ctx.createLinearGradient(x + 11 * scale, y + 6 * scale, x + 11 * scale, y + 22 * scale);
+    caneGrad.addColorStop(0, adjustBrightness('#6a5a4a', brightness));
+    caneGrad.addColorStop(1, adjustBrightness('#4a3a2a', brightness));
+    ctx.strokeStyle = caneGrad;
+    ctx.lineWidth = 3 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x + 11 * scale, y + 7 * scale + idle);
+    ctx.lineTo(x + 11 * scale, y + 22 * scale);
     ctx.stroke();
     
-    // Cane handle
+    // Cane handle (curved)
+    ctx.strokeStyle = adjustBrightness('#8B7355', brightness);
+    ctx.lineWidth = 3 * scale;
     ctx.beginPath();
-    ctx.arc(x + 11, y + 4, 2.5, Math.PI, 0);
+    ctx.arc(x + 11 * scale, y + 5 * scale + idle, 3 * scale, Math.PI, 0, true);
     ctx.stroke();
+    
+    // Cane tip
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.beginPath();
+    ctx.arc(x + 11 * scale, y + 22 * scale, 2 * scale, 0, Math.PI * 2);
+    ctx.fill();
     
     // Highlight if hoverable
     if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
-        ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.05;
-        ctx.strokeStyle = '#e8dcc4';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
+        const time = Date.now() / 1000;
+        ctx.globalAlpha = 0.28 + Math.sin(time * 2) * 0.08;
+        ctx.strokeStyle = '#f6e8c5';
+        ctx.lineWidth = 3.2;
+        ctx.setLineDash([7, 6]);
         ctx.strokeRect(emersonClickArea.x, emersonClickArea.y, emersonClickArea.width, emersonClickArea.height);
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
     }
 }
 
+// Original procedural Thoreau drawing
 function drawThoreau() {
     const brightness = gameState.atmosphere.brightness;
     const x = canvas.width * 0.72;
     const y = canvas.height * 0.52;
     const time = Date.now() / 1000;
+    const scale = canvas.height / 600; // Scale based on canvas size
     
     // Update clickable area
-    thoreauClickArea.x = x - 20;
-    thoreauClickArea.y = y - 35;
-    thoreauClickArea.width = 45;
-    thoreauClickArea.height = 80;
+    thoreauClickArea.x = x - 25 * scale;
+    thoreauClickArea.y = y - 40 * scale;
+    thoreauClickArea.width = 50 * scale;
+    thoreauClickArea.height = 90 * scale;
     
-    // Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    // Position the cat near Thoreau's feet (uses catCanClickArea for click/hover)
+    const catWidth = 26 * scale;
+    const catHeight = 20 * scale;
+    const catX = x + 32 * scale;
+    const catY = y + 22 * scale;
+    catCanClickArea.x = catX - 6 * scale;
+    catCanClickArea.y = catY - 6 * scale;
+    catCanClickArea.width = catWidth + 12 * scale;
+    catCanClickArea.height = catHeight + 12 * scale;
+    
+    // Soft shadow with gradient
+    const shadowGrad = ctx.createRadialGradient(x, y + 45 * scale, 0, x, y + 45 * scale, 20 * scale);
+    shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+    shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = shadowGrad;
     ctx.beginPath();
-    ctx.ellipse(x, y + 43, 14, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 45 * scale, 18 * scale, 6 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     
     // Subtle breathing animation
-    const breathe = Math.sin(time * 0.8) * 0.5;
+    const breathe = Math.sin(time * 0.8) * 0.6 * scale;
     
-    // Legs with slight sway
-    const sway = Math.sin(time * 0.5) * 0.5;
+    // Legs with rounded edges and shading
+    const sway = Math.sin(time * 0.5) * 0.8 * scale;
+    
+    // Leg shadows/depth
+    ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
+    ctx.beginPath();
+    ctx.roundRect(x - 7 * scale + sway, y + 21 * scale, 6 * scale, 23 * scale, 2 * scale);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(x + 1 * scale - sway, y + 21 * scale, 6 * scale, 23 * scale, 2 * scale);
+    ctx.fill();
+    
+    // Legs main
+    ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    ctx.beginPath();
+    ctx.roundRect(x - 6 * scale + sway, y + 20 * scale, 5 * scale, 22 * scale, 2 * scale);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(x + 2 * scale - sway, y + 20 * scale, 5 * scale, 22 * scale, 2 * scale);
+    ctx.fill();
+    
+    // Body (coat) with gradient and texture
+    const coatGrad = ctx.createLinearGradient(x - 15 * scale, y, x + 15 * scale, y);
+    coatGrad.addColorStop(0, adjustBrightness('#4a3428', brightness));
+    coatGrad.addColorStop(0.5, adjustBrightness('#5C4033', brightness));
+    coatGrad.addColorStop(1, adjustBrightness('#4a3428', brightness));
+    ctx.fillStyle = coatGrad;
+    ctx.beginPath();
+    ctx.roundRect(x - 13 * scale, y + breathe, 26 * scale, 28 * scale, 3 * scale);
+    ctx.fill();
+    
+    // Coat collar
     ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
-    ctx.fillRect(x - 6 + sway, y + 20, 5, 21);
-    ctx.fillRect(x + 1 - sway, y + 20, 5, 21);
+    ctx.beginPath();
+    ctx.arc(x - 8 * scale, y + 2 + breathe, 4 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 8 * scale, y + 2 + breathe, 4 * scale, 0, Math.PI * 2);
+    ctx.fill();
     
-    // Body (coat)
-    ctx.fillStyle = adjustBrightness('#5C4033', brightness);
-    ctx.fillRect(x - 11, y + breathe, 22, 26);
-    
-    // Coat buttons
+    // Coat buttons with shine
     ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
     for (let i = 0; i < 3; i++) {
         ctx.beginPath();
-        ctx.arc(x, y + 5 + i * 7 + breathe, 1.5, 0, Math.PI * 2);
+        ctx.arc(x, y + 6 * scale + i * 8 * scale + breathe, 2 * scale, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Button shine
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(x - 0.5 * scale, y + 5.5 * scale + i * 8 * scale + breathe, 0.8 * scale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
     }
     
-    // Arms
-    ctx.fillStyle = adjustBrightness('#5C4033', brightness);
-    // Right arm (holding rod) with slight motion
+    // Arms with proper shading
+    // Right arm (holding rod)
     ctx.save();
-    ctx.translate(x + 10, y + 8 + breathe);
+    ctx.translate(x + 11 * scale, y + 10 * scale + breathe);
     ctx.rotate(Math.PI / 6 + Math.sin(time) * 0.05);
-    ctx.fillRect(-3, 0, 6, 19);
+    
+    const armGrad = ctx.createLinearGradient(-4 * scale, 0, 4 * scale, 0);
+    armGrad.addColorStop(0, adjustBrightness('#4a3428', brightness));
+    armGrad.addColorStop(0.5, adjustBrightness('#5C4033', brightness));
+    armGrad.addColorStop(1, adjustBrightness('#3a2418', brightness));
+    ctx.fillStyle = armGrad;
+    ctx.beginPath();
+    ctx.roundRect(-3.5 * scale, 0, 7 * scale, 22 * scale, 3 * scale);
+    ctx.fill();
     ctx.restore();
     
     // Left arm
-    ctx.fillRect(x - 14, y + 5 + breathe, 6, 16);
+    ctx.fillStyle = adjustBrightness('#4a3428', brightness);
+    ctx.beginPath();
+    ctx.roundRect(x - 16 * scale, y + 6 * scale + breathe, 7 * scale, 18 * scale, 3 * scale);
+    ctx.fill();
+    
+    // Hands
+    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
+    ctx.beginPath();
+    ctx.arc(x - 13 * scale, y + 24 * scale + breathe, 3.5 * scale, 0, Math.PI * 2);
+    ctx.fill();
     
     // Neck
     ctx.fillStyle = adjustBrightness('#d4a574', brightness);
-    ctx.fillRect(x - 4, y - 2, 8, 4);
-    
-    // Head - clean circle
-    ctx.fillStyle = adjustBrightness('#d4a574', brightness);
     ctx.beginPath();
-    ctx.arc(x, y - 8, 11, 0, Math.PI * 2);
+    ctx.roundRect(x - 4.5 * scale, y - 2 * scale, 9 * scale, 5 * scale, 2 * scale);
     ctx.fill();
     
-    // Simple beard - just a half circle at bottom
+    // Head - smooth circle with shading
+    const headGrad = ctx.createRadialGradient(x - 3 * scale, y - 10 * scale, 2, x, y - 8 * scale, 13 * scale);
+    headGrad.addColorStop(0, adjustBrightness('#e8c594', brightness));
+    headGrad.addColorStop(0.7, adjustBrightness('#d4a574', brightness));
+    headGrad.addColorStop(1, adjustBrightness('#c49560', brightness));
+    ctx.fillStyle = headGrad;
+    ctx.beginPath();
+    ctx.arc(x, y - 8 * scale, 13 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Beard - textured and layered
+    ctx.fillStyle = adjustBrightness('#5a4a3a', brightness);
+    ctx.beginPath();
+    ctx.arc(x, y - 2 * scale, 9 * scale, 0, Math.PI, false);
+    ctx.fill();
+    
+    // Beard detail/texture
     ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.ellipse(x + i * 3 * scale, y, 2 * scale, 3 * scale, 0, 0, Math.PI);
+        ctx.fill();
+    }
+    
+    // Eyes with detail
+    ctx.fillStyle = adjustBrightness('#ffffff', brightness);
     ctx.beginPath();
-    ctx.arc(x, y - 3, 7, 0, Math.PI);
+    ctx.ellipse(x - 5 * scale, y - 10 * scale, 2.5 * scale, 3 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + 5 * scale, y - 10 * scale, 2.5 * scale, 3 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     
-    // Two simple eyes
+    // Pupils
     ctx.fillStyle = adjustBrightness('#2a1a0a', brightness);
-    ctx.fillRect(x - 4, y - 10, 2, 2);
-    ctx.fillRect(x + 2, y - 10, 2, 2);
-    
-    // Hat
-    ctx.fillStyle = adjustBrightness('#2C2416', brightness);
-    // Hat brim
     ctx.beginPath();
-    ctx.ellipse(x, y - 20, 17, 3, 0, 0, Math.PI * 2);
+    ctx.arc(x - 5 * scale, y - 9 * scale, 1.5 * scale, 0, Math.PI * 2);
     ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 5 * scale, y - 9 * scale, 1.5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Eye highlights
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.beginPath();
+    ctx.arc(x - 4.5 * scale, y - 9.5 * scale, 0.8 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 5.5 * scale, y - 9.5 * scale, 0.8 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Nose
+    ctx.fillStyle = adjustBrightness('#c49560', brightness);
+    ctx.beginPath();
+    ctx.moveTo(x, y - 8 * scale);
+    ctx.lineTo(x - 1 * scale, y - 5 * scale);
+    ctx.lineTo(x + 1 * scale, y - 5 * scale);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Hat with detail and shading
+    const hatGrad = ctx.createLinearGradient(x - 15 * scale, y - 32 * scale, x + 15 * scale, y - 20 * scale);
+    hatGrad.addColorStop(0, adjustBrightness('#1a1410', brightness));
+    hatGrad.addColorStop(0.5, adjustBrightness('#2C2416', brightness));
+    hatGrad.addColorStop(1, adjustBrightness('#1a1410', brightness));
+    
+    // Hat brim
+    ctx.fillStyle = hatGrad;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 20 * scale, 19 * scale, 4 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
     // Hat crown
-    ctx.fillRect(x - 11, y - 32, 22, 15);
+    ctx.fillStyle = adjustBrightness('#2C2416', brightness);
+    ctx.beginPath();
+    ctx.moveTo(x - 12 * scale, y - 20 * scale);
+    ctx.lineTo(x - 10 * scale, y - 35 * scale);
+    ctx.lineTo(x + 10 * scale, y - 35 * scale);
+    ctx.lineTo(x + 12 * scale, y - 20 * scale);
+    ctx.closePath();
+    ctx.fill();
+    
     // Hat band
     ctx.fillStyle = adjustBrightness('#4a3a2a', brightness);
-    ctx.fillRect(x - 11, y - 22, 22, 3);
+    ctx.fillRect(x - 12 * scale, y - 23 * scale, 24 * scale, 4 * scale);
     
-    // Fishing rod (more detailed)
-    const rodTip = Math.sin(time * 2) * 1;
-    ctx.strokeStyle = adjustBrightness('#8B7355', brightness);
-    ctx.lineWidth = 3;
+    // Hat shine/highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.fillRect(x - 8 * scale, y - 33 * scale, 10 * scale, 6 * scale);
+    
+    // Fishing rod with better detail
+    const rodTip = Math.sin(time * 2) * 2 * scale;
+    
+    // Rod shadow
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 4 * scale;
     ctx.beginPath();
-    ctx.moveTo(x + 8, y + 20);
-    ctx.lineTo(x + 40, y - 25 + rodTip);
+    ctx.moveTo(x + 9 * scale, y + 21 * scale);
+    ctx.lineTo(x + 42 * scale, y - 24 * scale + rodTip);
     ctx.stroke();
     
-    // Rod segments
-    ctx.strokeStyle = adjustBrightness('#6d5a44', brightness);
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 3; i++) {
-        const segY = y + 20 - (i * 15);
+    // Rod gradient
+    const rodGrad = ctx.createLinearGradient(x + 8 * scale, y + 20 * scale, x + 40 * scale, y - 25 * scale);
+    rodGrad.addColorStop(0, adjustBrightness('#9B8365', brightness));
+    rodGrad.addColorStop(0.5, adjustBrightness('#8B7355', brightness));
+    rodGrad.addColorStop(1, adjustBrightness('#6d5a44', brightness));
+    ctx.strokeStyle = rodGrad;
+    ctx.lineWidth = 3 * scale;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x + 8 * scale, y + 20 * scale);
+    ctx.lineTo(x + 40 * scale, y - 25 * scale + rodTip);
+    ctx.stroke();
+    
+    // Rod segments/wrapping
+    ctx.strokeStyle = adjustBrightness('#5a4530', brightness);
+    ctx.lineWidth = 1.5 * scale;
+    for (let i = 0; i < 4; i++) {
+        const t = i / 4;
+        const segX = x + 8 * scale + (32 * scale * t);
+        const segY = y + 20 * scale - (45 * scale * t) + rodTip * t;
         ctx.beginPath();
-        ctx.moveTo(x + 8 + (i * 10.5), segY);
-        ctx.lineTo(x + 11 + (i * 10.5), segY);
+        ctx.moveTo(segX - 2 * scale, segY);
+        ctx.lineTo(segX + 2 * scale, segY);
         ctx.stroke();
     }
     
-    // Rod tip
-    ctx.fillStyle = adjustBrightness('#6d5a44', brightness);
+    // Rod tip with shine
+    ctx.fillStyle = adjustBrightness('#3a2a1a', brightness);
     ctx.beginPath();
-    ctx.arc(x + 40, y - 25 + rodTip, 3, 0, Math.PI * 2);
+    ctx.arc(x + 40 * scale, y - 25 * scale + rodTip, 3.5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.beginPath();
+    ctx.arc(x + 39 * scale, y - 26 * scale + rodTip, 1.5 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Cat sitting near Thoreau (higher fidelity)
+    const catBodyGrad = ctx.createLinearGradient(catX, catY, catX, catY + catHeight);
+    catBodyGrad.addColorStop(0, adjustBrightness('#aeb9b0', brightness));
+    catBodyGrad.addColorStop(1, adjustBrightness('#6d7b70', brightness));
+    
+    // Tail with soft curve
+    ctx.fillStyle = adjustBrightness('#7f8d82', brightness);
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.78, catY + catHeight * 0.62);
+    ctx.quadraticCurveTo(catX + catWidth * 1.25, catY + catHeight * 0.3, catX + catWidth * 0.95, catY + catHeight * 0.08);
+    ctx.quadraticCurveTo(catX + catWidth * 0.82, catY + catHeight * 0.28, catX + catWidth * 0.70, catY + catHeight * 0.65);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Body
+    ctx.fillStyle = catBodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(catX + catWidth * 0.46, catY + catHeight * 0.60, catWidth * 0.48, catHeight * 0.52, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Subtle stripes
+    ctx.strokeStyle = adjustBrightness('rgba(70, 90, 80, 0.35)', brightness);
+    ctx.lineWidth = 1.2 * scale;
+    for (let i = 0; i < 3; i++) {
+        const stripeY = catY + catHeight * (0.55 + i * 0.12);
+        ctx.beginPath();
+        ctx.moveTo(catX + catWidth * 0.18, stripeY);
+        ctx.quadraticCurveTo(catX + catWidth * 0.46, stripeY - catHeight * 0.08, catX + catWidth * 0.70, stripeY);
+        ctx.stroke();
+    }
+    
+    // Head
+    ctx.fillStyle = catBodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(catX + catWidth * 0.26, catY + catHeight * 0.34, catWidth * 0.30, catHeight * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Ears
+    ctx.fillStyle = adjustBrightness('#8f9b91', brightness);
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.05, catY + catHeight * 0.24);
+    ctx.lineTo(catX + catWidth * 0.17, catY + catHeight * 0.02);
+    ctx.lineTo(catX + catWidth * 0.26, catY + catHeight * 0.24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.32, catY + catHeight * 0.24);
+    ctx.lineTo(catX + catWidth * 0.44, catY + catHeight * 0.02);
+    ctx.lineTo(catX + catWidth * 0.53, catY + catHeight * 0.24);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Ear inner
+    ctx.fillStyle = adjustBrightness('#d7c3b5', brightness);
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.11, catY + catHeight * 0.23);
+    ctx.lineTo(catX + catWidth * 0.17, catY + catHeight * 0.09);
+    ctx.lineTo(catX + catWidth * 0.22, catY + catHeight * 0.23);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.37, catY + catHeight * 0.23);
+    ctx.lineTo(catX + catWidth * 0.43, catY + catHeight * 0.09);
+    ctx.lineTo(catX + catWidth * 0.48, catY + catHeight * 0.23);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Face highlights
+    ctx.fillStyle = adjustBrightness('#e4ece4', brightness);
+    ctx.beginPath();
+    ctx.ellipse(catX + catWidth * 0.20, catY + catHeight * 0.36, catWidth * 0.07, catHeight * 0.08, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(catX + catWidth * 0.33, catY + catHeight * 0.36, catWidth * 0.07, catHeight * 0.08, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Eyes
+    ctx.fillStyle = '#1f1f1f';
+    ctx.beginPath();
+    ctx.arc(catX + catWidth * 0.20, catY + catHeight * 0.34, catWidth * 0.036, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(catX + catWidth * 0.33, catY + catHeight * 0.34, catWidth * 0.036, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.arc(catX + catWidth * 0.22, catY + catHeight * 0.32, catWidth * 0.012, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(catX + catWidth * 0.35, catY + catHeight * 0.32, catWidth * 0.012, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Nose and mouth
+    ctx.fillStyle = adjustBrightness('#cba089', brightness);
+    ctx.beginPath();
+    ctx.arc(catX + catWidth * 0.26, catY + catHeight * 0.40, catWidth * 0.032, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = adjustBrightness('#3a2a1a', brightness);
+    ctx.lineWidth = 1.3 * scale;
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.26, catY + catHeight * 0.42);
+    ctx.quadraticCurveTo(catX + catWidth * 0.24, catY + catHeight * 0.45, catX + catWidth * 0.21, catY + catHeight * 0.47);
+    ctx.moveTo(catX + catWidth * 0.26, catY + catHeight * 0.42);
+    ctx.quadraticCurveTo(catX + catWidth * 0.28, catY + catHeight * 0.45, catX + catWidth * 0.31, catY + catHeight * 0.47);
+    ctx.stroke();
+    
+    // Whiskers
+    ctx.beginPath();
+    ctx.moveTo(catX + catWidth * 0.17, catY + catHeight * 0.40);
+    ctx.lineTo(catX + catWidth * 0.08, catY + catHeight * 0.37);
+    ctx.moveTo(catX + catWidth * 0.17, catY + catHeight * 0.42);
+    ctx.lineTo(catX + catWidth * 0.07, catY + catHeight * 0.43);
+    ctx.moveTo(catX + catWidth * 0.35, catY + catHeight * 0.40);
+    ctx.lineTo(catX + catWidth * 0.44, catY + catHeight * 0.37);
+    ctx.moveTo(catX + catWidth * 0.35, catY + catHeight * 0.42);
+    ctx.lineTo(catX + catWidth * 0.45, catY + catHeight * 0.43);
+    ctx.stroke();
+    
+    // Chest fluff
+    ctx.fillStyle = adjustBrightness('#e6ede6', brightness);
+    ctx.beginPath();
+    ctx.ellipse(catX + catWidth * 0.30, catY + catHeight * 0.50, catWidth * 0.12, catHeight * 0.10, 0, 0, Math.PI * 2);
     ctx.fill();
     
     // Highlight if hoverable
     if (gameState.mode === 'story' || gameState.mode === 'freeplay') {
-        ctx.globalAlpha = 0.1 + Math.sin(time * 2) * 0.05;
-        ctx.strokeStyle = '#e8dcc4';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
+        const time = Date.now() / 1000;
+        ctx.globalAlpha = 0.32 + Math.sin(time * 2) * 0.1;
+        ctx.strokeStyle = '#f6e8c5';
+        ctx.lineWidth = 3.5;
+        ctx.setLineDash([7, 6]);
         ctx.strokeRect(thoreauClickArea.x, thoreauClickArea.y, thoreauClickArea.width, thoreauClickArea.height);
+        ctx.strokeRect(catCanClickArea.x, catCanClickArea.y, catCanClickArea.width, catCanClickArea.height);
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
     }
@@ -2425,4 +4137,3 @@ function adjustBrightness(color, factor) {
 
 // Start the game when page loads
 window.addEventListener('load', init);
-

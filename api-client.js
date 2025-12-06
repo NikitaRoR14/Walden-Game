@@ -224,6 +224,56 @@ async function completeStory() {
     }
 }
 
+// Social: search users by nickname
+async function searchUsersByNickname(nickname) {
+    const response = await fetch(`${API_BASE_URL}/friends/search?nickname=${encodeURIComponent(nickname)}`, {
+        headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Search failed');
+    }
+    return data;
+}
+
+// Social: subscribe to user
+async function subscribeToUser(nickname) {
+    const response = await fetch(`${API_BASE_URL}/friends/subscribe`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ nickname })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Failed to subscribe');
+    }
+    return data;
+}
+
+// Social: get friends and subscriptions
+async function fetchFriendsAndSubscriptions() {
+    const response = await fetch(`${API_BASE_URL}/friends`, {
+        headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Failed to load friends');
+    }
+    return data;
+}
+
+// Social: get public profile by nickname
+async function fetchProfileByNickname(nickname) {
+    const response = await fetch(`${API_BASE_URL}/profile/${encodeURIComponent(nickname)}`, {
+        headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error || 'Failed to load profile');
+    }
+    return data;
+}
+
 /**
  * Get user's game progress
  */
@@ -252,11 +302,12 @@ async function updatePlayTime(seconds) {
         const response = await fetch(`${API_BASE_URL}/progress/play-time`, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ seconds })
+            body: JSON.stringify({ seconds: Math.floor(seconds) })
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const text = await response.text().catch(() => '');
+            throw new Error(`HTTP error! status: ${response.status} body: ${text}`);
         }
 
         return await response.json();
@@ -283,4 +334,3 @@ async function getProgressLeaderboard() {
         return null;
     }
 }
-

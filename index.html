@@ -69,6 +69,17 @@
                         </div>
                         <div class="button-arrow-large">→</div>
                     </button>
+
+                    <button id="friends-menu-btn" class="fullscreen-menu-button">
+                        <div class="button-icon-large">
+                            <img src="assets/images/UI/person.png" alt="Friends">
+                        </div>
+                        <div class="button-text-large">
+                            <h2 class="button-title-large">Friends</h2>
+                            <p class="button-desc-large">Search players, subscribe, and track friendships</p>
+                        </div>
+                        <div class="button-arrow-large">→</div>
+                    </button>
                     
                     <button id="view-profile-btn" class="fullscreen-menu-button" style="display: none;">
                         <div class="button-icon-large">
@@ -106,22 +117,69 @@
                         <span class="status-label">Legacies:</span>
                         <span id="legacy-count">0</span>
                     </div>
+                    <button id="friends-toggle" class="status-item friends-toggle">Add friends</button>
                 </div>
 
                 <div id="fishing-prompt" class="prompt-box">
-                    <p>Press SPACE to cast your line</p>
+                    <p>Press F to cast your line</p>
                 </div>
 
                 <div id="fishing-minigame" class="fishing-minigame hidden">
                     <div class="minigame-container">
-                        <div class="minigame-title">Keep the fish in the green bar!</div>
-                        <div class="minigame-instruction">Hold SPACE or CLICK to move bar up</div>
-                        <div class="fishing-track">
-                            <div id="fishing-bar" class="fishing-bar"></div>
-                            <div id="fish-icon" class="fish-icon">🐟</div>
+                        <div class="minigame-header">
+                            <div class="minigame-title">
+                                <span id="fish-name-display">Reeling in...</span>
+                            </div>
+                            <div class="fish-behavior-hint" id="behavior-hint">Studying the fish...</div>
                         </div>
-                        <div class="catch-progress">
-                            <div id="catch-progress-fill" class="catch-progress-fill"></div>
+                        
+                        <div class="minigame-instruction">Hold SPACE or CLICK to raise the green zone</div>
+                        
+                        <!-- Main Fishing Track -->
+                        <div class="fishing-track-wrapper">
+                            <div class="fishing-track">
+                                <div id="fishing-bar" class="fishing-bar"></div>
+                                <div id="fish-icon" class="fish-icon">🐟</div>
+                                <div class="track-markers">
+                                    <div class="track-marker" style="top: 25%"></div>
+                                    <div class="track-marker" style="top: 50%"></div>
+                                    <div class="track-marker" style="top: 75%"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Catch Quality Indicator -->
+                            <div class="quality-indicator" id="quality-indicator">
+                                <div class="quality-text">Perfect!</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Enhanced Progress Bar -->
+                        <div class="catch-progress-container">
+                            <div class="progress-label">
+                                <span>Progress</span>
+                                <span id="progress-percentage">0%</span>
+                            </div>
+                            <div class="catch-progress">
+                                <div id="catch-progress-fill" class="catch-progress-fill"></div>
+                                <div class="progress-shine"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Combo Counter -->
+                        <div class="combo-display" id="combo-display">
+                            <div class="combo-text">Combo: <span id="combo-count">0</span></div>
+                            <div class="combo-bar">
+                                <div id="combo-bar-fill" class="combo-bar-fill"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Debug Info (temporary) -->
+                        <div id="fishing-debug" style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.5); border-radius: 5px; font-size: 0.8em; color: #fff; font-family: monospace;">
+                            <div>Fish Position: <span id="debug-fish">0</span></div>
+                            <div>Bar Range: <span id="debug-bar-start">0</span> - <span id="debug-bar-end">0</span></div>
+                            <div>Bar Velocity: <span id="debug-velocity">0</span></div>
+                            <div>Fish In Bar: <span id="debug-in-bar">NO</span></div>
+                            <div>Holding Space: <span id="debug-holding">NO</span></div>
                         </div>
                     </div>
                 </div>
@@ -163,6 +221,9 @@
                         <div class="escape-menu-buttons">
                             <button id="resume-btn" class="escape-button">Resume Game</button>
                             <button id="settings-btn" class="escape-button">Settings</button>
+                            <button id="fullscreen-btn" class="escape-button">
+                                <span id="fullscreen-text">Enter Fullscreen</span>
+                            </button>
                             <button id="main-menu-btn" class="escape-button">Main Menu</button>
                         </div>
                         <p class="hint-text">Press ESC to resume</p>
@@ -191,6 +252,71 @@
                         </div>
                         
                         <button id="close-settings-btn" class="main-button">Back</button>
+                    </div>
+                </div>
+
+                <div id="friends-panel" class="friends-panel hidden">
+                    <div class="friends-panel__header">
+                        <div>
+                            <div class="friends-title">Friends & Subscriptions</div>
+                            <div class="friends-subtitle">Find players, subscribe, and manage your connections</div>
+                        </div>
+                        <button id="friends-close" class="friends-close">&times;</button>
+                    </div>
+
+                    <!-- Quick Stats Summary -->
+                    <div class="friends-summary">
+                        <div class="summary-card">
+                            <div class="summary-label">Friends</div>
+                            <div id="friends-count" class="summary-value">0</div>
+                            <div class="summary-caption">Mutual subscriptions</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">Subscribed</div>
+                            <div id="subscriptions-count" class="summary-value">0</div>
+                            <div class="summary-caption">People you follow</div>
+                        </div>
+                    </div>
+
+                    <!-- Search Section -->
+                    <div class="friends-search-section">
+                        <div class="friends-search-section__header">
+                            <h3 class="friends-section-title">🔍 Find Players</h3>
+                            <p class="friends-section-subtitle">Search by nickname to discover and subscribe to other players</p>
+                        </div>
+                        <div class="friends-search">
+                            <input type="text" id="friend-search-input" placeholder="Enter nickname..." maxlength="30" />
+                            <button id="friend-search-btn" class="main-button slim">Search</button>
+                        </div>
+                        <div id="friend-search-status" class="friends-status"></div>
+                        <div class="friends-search-results-container">
+                            <div class="friends-search-results-label">Search Results</div>
+                            <div id="friend-search-results" class="friends-search-results"></div>
+                        </div>
+                    </div>
+
+                    <!-- Your Connections Section -->
+                    <div class="friends-connections-section">
+                        <div class="friends-connections-header">
+                            <h3 class="friends-section-title">👥 Your Connections</h3>
+                            <p class="friends-section-subtitle">Manage your friends and subscriptions</p>
+                        </div>
+                        <div class="friends-lists">
+                            <div class="friends-column">
+                                <div class="friends-column__header">
+                                    <div class="friends-column__title">Friends</div>
+                                    <div class="friends-column__subtitle">Mutual subscriptions</div>
+                                </div>
+                                <div id="friends-list" class="friends-list"></div>
+                            </div>
+                            <div class="friends-column">
+                                <div class="friends-column__header">
+                                    <div class="friends-column__title">Subscribed</div>
+                                    <div class="friends-column__subtitle">People you follow</div>
+                                </div>
+                                <div id="subscriptions-list" class="friends-list"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -239,7 +365,7 @@
                                 <blockquote>
                                     "What lies behind us and what lies before us are tiny matters compared to what lies within us."
                                 </blockquote>
-                                <cite>— Ralph Waldo Emerson</cite>
+                                <cite>- Ralph Waldo Emerson</cite>
                             </section>
                         </div>
                     </div>
@@ -278,7 +404,7 @@
                             <section class="bio-section">
                                 <h3>Daily Life</h3>
                                 <p>Thoreau's days began before dawn. He bathed in the pond, watched the sunrise, and spent mornings writing in his journal. He worked in his bean field for income, walked four hours daily observing nature, read classics by candlelight, and received occasional visitors.</p>
-                                <p>Contrary to myth, he wasn't a hermit—he walked to town frequently, dined with family and friends, and welcomed visitors to his cabin.</p>
+                                <p>Contrary to myth, he wasn't a hermit-he walked to town frequently, dined with family and friends, and welcomed visitors to his cabin.</p>
                             </section>
                             
                             <section class="bio-section">
@@ -301,7 +427,7 @@
                                 <blockquote>
                                     "I learned this, at least, by my experiment: that if one advances confidently in the direction of his dreams, and endeavors to live the life which he has imagined, he will meet with a success unexpected in common hours."
                                 </blockquote>
-                                <cite>— Henry David Thoreau, Walden</cite>
+                                <cite>- Henry David Thoreau, Walden</cite>
                             </section>
                         </div>
                     </div>
@@ -329,7 +455,7 @@
                             <section class="bio-section">
                                 <h3>Walden Pond Experiment (1845-1847)</h3>
                                 <p>At age 28, Thoreau built a small cabin on land owned by his mentor Ralph Waldo Emerson near Walden Pond. For two years, two months, and two days, he lived simply, deliberately, and self-sufficiently. He grew beans, observed nature, read classics, wrote in his journal daily, and questioned the assumptions of American life.</p>
-                                <p>His cabin cost $28.12½ to build—a fraction of what his neighbors spent on houses. This wasn't mere frugality; it was a philosophical experiment about the relationship between cost and life itself.</p>
+                                <p>His cabin cost $28.12½ to build-a fraction of what his neighbors spent on houses. This wasn't mere frugality; it was a philosophical experiment about the relationship between cost and life itself.</p>
                             </section>
                             
                             <section class="bio-section">
@@ -374,17 +500,38 @@
                             <section class="bio-section">
                                 <h3>Later Life & Death</h3>
                                 <p>After Walden, Thoreau returned to Concord, living with his family while working as a surveyor, lecturer, and writer. He became increasingly radical in his opposition to slavery, helping fugitive slaves escape via the Underground Railroad and defending John Brown's raid on Harpers Ferry.</p>
-                                <p>He died of tuberculosis at age 44 on May 6, 1862. His last words were reportedly "moose" and "Indian"—fitting for a man who loved wilderness. At his funeral, his friend Emerson said: "The country knows not yet, or in the least part, how great a son it has lost."</p>
+                                <p>He died of tuberculosis at age 44 on May 6, 1862. His last words were reportedly "moose" and "Indian"-fitting for a man who loved wilderness. At his funeral, his friend Emerson said: "The country knows not yet, or in the least part, how great a son it has lost."</p>
                             </section>
                             
                             <section class="bio-section bio-quote">
                                 <blockquote>
                                     "I learned this, at least, by my experiment: that if one advances confidently in the direction of his dreams, and endeavors to live the life which he has imagined, he will meet with a success unexpected in common hours."
                                 </blockquote>
-                                <cite>— Henry David Thoreau, Walden</cite>
+                                <cite>- Henry David Thoreau, Walden</cite>
                             </section>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cat info confirm modal -->
+        <div id="cat-confirm-popup" class="biography-popup hidden">
+            <div class="biography-content" style="max-width: 540px;">
+                <button id="close-cat-confirm" class="close-bio-btn">&times;</button>
+                <div class="bio-header">
+                    <div class="bio-title">
+                        <h2>Thoreau's Cat Tales</h2>
+                        <p class="bio-subtitle">Ready for the whispered lore of the Walden cats?</p>
+                    </div>
+                </div>
+                <div class="bio-scroll" style="max-height: 260px;">
+                    <section class="bio-section">
+                        <p>Thoreau did not keep a cat at Walden, but he wrote about the farm cats and strays of Concord-mousers by the hearth and hunters of birds. Open the notes to see what he actually observed.</p>
+                    </section>
+                </div>
+                <div class="legacy-actions" style="justify-content: flex-end; gap: 10px; padding: 0 24px 20px;">
+                    <button id="cat-confirm-open-page" class="main-button">Open cat compendium</button>
                 </div>
             </div>
         </div>
@@ -406,4 +553,3 @@
     <script src="game.js"></script>
 </body>
 </html>
-

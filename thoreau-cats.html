@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thoreau's Cats</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="cat-page">
+    <div class="cat-hero">
+        <div>
+            <p class="cat-kicker">Walden Footnotes</p>
+            <h1>Thoreau's Cats</h1>
+            <p class="cat-lead">Thoreau never kept a house cat at Walden. These notes gather what he actually wrote about farm cats, strays, and their place in Concord’s ecology.</p>
+        </div>
+        <button class="main-button" onclick="window.location.href='index.html'">← Back to pond</button>
+    </div>
+
+    <main class="cat-content">
+        <section class="cat-grid">
+            <article class="cat-card">
+                <header>
+                    <div class="cat-avatar">🏠</div>
+                    <div>
+                        <h2>No resident cabin cat</h2>
+                        <p class="cat-meta">Walden, 1845–1847</p>
+                    </div>
+                </header>
+                <p>Thoreau’s cabin was spare by design. He wrote about mice, loons, foxes, and owls-but no cat lived with him there.</p>
+            </article>
+
+            <article class="cat-card">
+                <header>
+                    <div class="cat-avatar">🐭</div>
+                    <div>
+                        <h2>Concord mousers</h2>
+                        <p class="cat-meta">Common farm cats</p>
+                    </div>
+                </header>
+                <p>Mid-19th century New England households kept cats mainly as mousers. Thoreau mentions “the common cat” doing practical work around town homes.</p>
+            </article>
+
+            <article class="cat-card">
+                <header>
+                    <div class="cat-avatar">🐦</div>
+                    <div>
+                        <h2>Predation notes</h2>
+                        <p class="cat-meta">Journal observations</p>
+                    </div>
+                </header>
+                <p>Thoreau recorded that domestic cats hunted birds and small wildlife-an early note on their impact. He contrasts “tame cats” with the wildness he valued.</p>
+            </article>
+
+            <article class="cat-card">
+                <header>
+                    <div class="cat-avatar">🐾</div>
+                    <div>
+                        <h2>Tracks in the woods</h2>
+                        <p class="cat-meta">Far from any house</p>
+                    </div>
+                </header>
+                <p>In his journals, Thoreau notes seeing a cat deep in the woods and remarks on how far it was from any farmhouse-an example of domestic animals straying into wild places.</p>
+            </article>
+        </section>
+
+        <section class="cat-notes">
+            <h3>Thoreau’s Field Notes</h3>
+            <ul>
+                <li>He never lists a cat among his Walden companions (he does list mice, loons, owls, foxes).</li>
+                <li>He refers to “common cats” as mousers in Concord homes-useful, but not wild.</li>
+                <li>He notes domestic cats hunting birds, an early observation on their effect on local wildlife.</li>
+                <li>He records finding a cat in the woods far from houses, underscoring his theme of wildness versus domestic life.</li>
+            </ul>
+        </section>
+    </main>
+
+    <script>
+        // Play cat theme on page load (user gesture comes from the button click)
+        document.addEventListener('DOMContentLoaded', () => {
+            const catAudio = new Audio('assets/sounds/cat_theme.mp3');
+            catAudio.loop = true;
+            catAudio.volume = 0.35;
+            catAudio.play().catch(() => {
+                console.log('Cat theme could not autoplay (file missing or blocked).');
+            });
+        });
+    </script>
+</body>
+</html>

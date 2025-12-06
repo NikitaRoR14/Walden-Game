@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friends - Voices at the Pond</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="friends.css">
+</head>
+<body>
+    <canvas id="friends-bg" class="friends-bg"></canvas>
+    
+    <div class="friends-hero">
+        <div class="friends-hero__content">
+            <h1>Friends & Subscriptions</h1>
+            <button id="back-to-menu" class="main-button">← Back to Menu</button>
+        </div>
+    </div>
+
+    <main class="friends-page">
+        <!-- Stats Row -->
+        <div class="stats-row">
+            <div class="stat-box">
+                <div class="stat-value" id="friends-count">0</div>
+                <div class="stat-label">Friends</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="subscriptions-count">0</div>
+                <div class="stat-label">Subscribed</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="member-since">-</div>
+                <div class="stat-label">Member since</div>
+            </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="search-bar">
+            <input id="search-input" type="text" placeholder="Search by nickname..." maxlength="30" />
+            <button id="search-btn" class="main-button slim">Search</button>
+        </div>
+        <div id="search-status" class="status-text"></div>
+
+        <!-- Main Content: Search Results and Connections -->
+        <div class="content-grid">
+            <!-- Search Results -->
+            <div class="card search-results-card">
+                <h2>Search Results</h2>
+                <div id="search-results" class="results-list"></div>
+            </div>
+
+            <!-- Friends -->
+            <div class="card friends-card">
+                <h2>Friends</h2>
+                <p class="card-subtitle">Mutual subscriptions</p>
+                <div id="friends-list" class="results-list"></div>
+            </div>
+
+            <!-- Subscribed -->
+            <div class="card subscribed-card">
+                <h2>Subscribed</h2>
+                <p class="card-subtitle">People you follow</p>
+                <div id="subs-list" class="results-list"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="player-modal" class="modal hidden">
+        <div class="modal__backdrop"></div>
+        <div class="modal__card">
+            <button id="modal-close" class="modal__close">×</button>
+            <div class="modal__header">
+                <div class="modal__avatar" id="modal-avatar"></div>
+                <div>
+                    <div class="pill">Player</div>
+                    <h3 id="modal-name"></h3>
+                    <p class="modal__meta" id="modal-meta"></p>
+                </div>
+            </div>
+            <div class="modal__stats" id="modal-stats"></div>
+            <div class="modal__actions">
+                <button id="modal-full-profile" class="main-button slim">See full info</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="api-client.js"></script>
+    <script src="friends-page.js"></script>
+</body>
+</html>

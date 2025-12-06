@@ -27,6 +27,36 @@ const legacyIcons = {
     'Individual Path': '🛤️'
 };
 
+// Check authentication
+function checkAuth() {
+    const token = localStorage.getItem('authToken');
+    
+    if (!token) {
+        window.location.href = 'auth.html';
+        return false;
+    }
+    
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expirationTime = payload.exp * 1000;
+        
+        if (Date.now() >= expirationTime) {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userData');
+            window.location.href = 'auth.html';
+            return false;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Invalid token:', error);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+        window.location.href = 'auth.html';
+        return false;
+    }
+}
+
 // Initialize page
 window.addEventListener('load', async () => {
     // Check authentication
@@ -96,27 +126,59 @@ function formatDate(dateString) {
     }
 }
 
+// Refresh user data from the backend when cached profile info is missing
+async function refreshUserProfile() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        if (data && data.user) {
+            localStorage.setItem('userData', JSON.stringify(data.user));
+            return data.user;
+        }
+    } catch (error) {
+        console.error('Error refreshing user profile:', error);
+    }
+
+    return null;
+}
+
 /**
  * Load user profile data
  */
 async function loadProfile() {
     try {
         // Get current user info
-        const user = getCurrentUser();
+        let user = getCurrentUser();
         if (!user) {
             window.location.href = 'auth.html';
             return;
+        }
+
+        // Backfill missing profile metadata from the backend
+        if (!user.createdAt && !user.created_at) {
+            const refreshedUser = await refreshUserProfile();
+            if (refreshedUser) {
+                user = refreshedUser;
+            }
         }
 
         // Display user info
         document.getElementById('userName').textContent = user.nickname;
         document.getElementById('userAvatar').textContent = avatarEmojis[user.avatar] || '👤';
         
-        // Format member since date
-        if (user.created_at) {
-            const memberDate = new Date(user.created_at);
+        // Format member since date (support both createdAt / created_at from backend)
+        const createdAt = user.createdAt || user.created_at;
+        if (createdAt) {
+            const memberDate = new Date(createdAt);
             document.getElementById('memberSince').textContent = 
                 `Member since ${memberDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
+        } else {
+            document.getElementById('memberSince').textContent = '';
         }
 
         // Fetch progress data
@@ -270,9 +332,10 @@ function getLegacyDescription(legacyName) {
  */
 function logout() {
     if (confirm('Are you sure you want to logout?')) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
         localStorage.removeItem('walden_auth_token');
         localStorage.removeItem('walden_user');
         window.location.href = 'auth.html';
     }
 }
-
