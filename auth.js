@@ -3,7 +3,18 @@
  * Handles login, signup, validation, and navigation
  */
 
-const API_BASE_URL = 'http://localhost:3000/api';
+// Auto-detect API URL based on environment
+const API_BASE_URL = (() => {
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:3000/api';
+        }
+        // Production: use same domain (backend serves frontend)
+        return `${window.location.protocol}//${window.location.host}/api`;
+    }
+    return process.env.API_BASE_URL || 'http://localhost:3000/api';
+})();
 
 // State
 let selectedAvatar = null;
