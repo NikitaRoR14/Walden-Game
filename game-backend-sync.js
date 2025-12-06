@@ -9,19 +9,29 @@
 let playTimeStart = null;
 let playTimeInterval = null;
 
-// Check if user is authenticated
-if (!isAuthenticated()) {
-    console.log('User not authenticated, skipping backend sync');
-} else {
-    console.log('✓ User authenticated, backend sync enabled');
-    
-    // Get current user
-    const currentUser = getCurrentUser();
-    console.log(`Playing as: ${currentUser.nickname}`);
-    
-    // Start play time tracking
-    startPlayTimeTracking();
-}
+// Wait for api-client.js to load before checking authentication
+(function checkAuthAndInit() {
+    // Check if isAuthenticated is available (api-client.js loaded)
+    if (typeof isAuthenticated === 'function' && typeof getCurrentUser === 'function') {
+        if (!isAuthenticated()) {
+            console.log('User not authenticated, skipping backend sync');
+        } else {
+            console.log('✓ User authenticated, backend sync enabled');
+            
+            // Get current user
+            const currentUser = getCurrentUser();
+            if (currentUser) {
+                console.log(`Playing as: ${currentUser.nickname}`);
+            }
+            
+            // Start play time tracking
+            startPlayTimeTracking();
+        }
+    } else {
+        // api-client.js not loaded yet, try again in a moment
+        setTimeout(checkAuthAndInit, 100);
+    }
+})();
 
 /**
  * Start tracking play time
@@ -64,7 +74,7 @@ async function flushPlayTime() {
  * Sync fish catch to backend
  */
 async function syncFishCatch(fishId, fishName) {
-    if (!isAuthenticated()) return;
+    if (typeof isAuthenticated !== 'function' || !isAuthenticated()) return;
 
     try {
         const res = await recordFish(fishId, fishName);
@@ -82,7 +92,7 @@ async function syncFishCatch(fishId, fishName) {
  * Sync legacy unlock to backend
  */
 async function syncLegacyUnlock(legacyName) {
-    if (!isAuthenticated()) return;
+    if (typeof isAuthenticated !== 'function' || !isAuthenticated()) return;
 
     try {
         const res = await recordLegacy(legacyName);
@@ -100,7 +110,7 @@ async function syncLegacyUnlock(legacyName) {
  * Sync story completion to backend
  */
 async function syncStoryComplete() {
-    if (!isAuthenticated()) return;
+    if (typeof isAuthenticated !== 'function' || !isAuthenticated()) return;
 
     try {
         await completeStory();
@@ -114,7 +124,7 @@ async function syncStoryComplete() {
  * Load user progress from backend
  */
 async function loadUserProgress() {
-    if (!isAuthenticated()) return null;
+    if (typeof isAuthenticated !== 'function' || !isAuthenticated()) return null;
 
     try {
         const data = await getUserProgress();
@@ -133,6 +143,12 @@ async function loadUserProgress() {
  * Display user info in game UI
  */
 function displayUserInfo() {
+    // Check if functions are available
+    if (typeof isAuthenticated !== 'function' || typeof getCurrentUser !== 'function') {
+        console.warn('api-client.js not loaded, cannot display user info');
+        return;
+    }
+    
     if (!isAuthenticated()) return;
 
     const user = getCurrentUser();

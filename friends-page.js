@@ -31,6 +31,14 @@
     }
 
     async function initFriendsPage() {
+        // Check if api-client.js is loaded
+        if (typeof isAuthenticated !== 'function') {
+            console.error('api-client.js not loaded. Please refresh the page.');
+            // Wait a bit and try again
+            setTimeout(initFriendsPage, 500);
+            return;
+        }
+        
         if (!isAuthenticated()) {
             window.location.href = 'auth.html';
             return;
