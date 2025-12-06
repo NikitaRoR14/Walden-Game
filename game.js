@@ -563,43 +563,84 @@ const soundManager = {
 };
 
 // Check authentication before allowing game access
-function checkAuthentication() {
+async function checkAuthentication() {
     const token = localStorage.getItem('authToken');
     
     if (!token) {
         // No token - redirect to auth page
+        console.log('No auth token found, redirecting to auth page');
         window.location.href = 'auth.html';
         return false;
     }
     
-    // Verify token is valid (check if it's expired or malformed)
+    // Quick local check first (for performance)
     try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         const expirationTime = payload.exp * 1000; // Convert to milliseconds
         
         if (Date.now() >= expirationTime) {
-            // Token expired - clear and redirect
+            // Token expired locally - clear and redirect
+            console.log('Token expired locally');
             localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
             window.location.href = 'auth.html';
             return false;
         }
-        
-        return true;
     } catch (error) {
         // Invalid token format - clear and redirect
-        console.error('Invalid token:', error);
+        console.error('Invalid token format:', error);
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
         window.location.href = 'auth.html';
         return false;
     }
+    
+    // Verify token with backend (async verification)
+    try {
+        const API_BASE_URL = (() => {
+            if (typeof window !== 'undefined') {
+                const hostname = window.location.hostname;
+                if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                    return 'http://localhost:3000/api';
+                }
+                return `${window.location.protocol}//${window.location.host}/api`;
+            }
+            return 'http://localhost:3000/api';
+        })();
+        
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            const userData = await response.json();
+            // Update userData in localStorage
+            localStorage.setItem('userData', JSON.stringify(userData));
+            console.log('Authentication verified with backend');
+            return true;
+        } else {
+            // Token invalid on backend - clear and redirect
+            console.log('Token invalid on backend, redirecting to auth page');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('userData');
+            window.location.href = 'auth.html';
+            return false;
+        }
+    } catch (error) {
+        // Network error - allow to proceed but log warning
+        // This prevents network issues from blocking access
+        console.warn('Could not verify token with backend (network error), proceeding with local token:', error);
+        return true; // Allow to proceed with local token check
+    }
 }
 
 // Initialize game
-function init() {
+async function init() {
     // Check authentication first
-    if (!checkAuthentication()) {
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) {
         return; // Stop initialization if not authenticated
     }
     
