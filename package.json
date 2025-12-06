@@ -1,0 +1,11 @@
+{
+  "name": "walden-game",
+  "version": "1.0.0",
+  "description": "Walden Game - Full Stack Application",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
+
