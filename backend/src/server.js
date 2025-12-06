@@ -49,8 +49,11 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Serve static files from parent directory (the game files)
-app.use(express.static(path.join(__dirname, '../..')));
+// Request logging (before static to catch all requests)
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+});
 
 // Root health check endpoint (for monitoring)
 app.get('/health', (req, res) => {
@@ -60,12 +63,6 @@ app.get('/health', (req, res) => {
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development'
     });
-});
-
-// Request logging
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-    next();
 });
 
 /**
@@ -590,6 +587,12 @@ app.get('/api/progress/leaderboard', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch leaderboard' });
     }
 });
+
+/**
+ * Serve static files from parent directory (the game files)
+ * This must be AFTER all API routes to prevent API requests from being served as static files
+ */
+app.use(express.static(path.join(__dirname, '../..')));
 
 /**
  * 404 handler
